@@ -37,48 +37,122 @@ install-foundation: helm-repos
 	bash tools/scripts/install_foundation.sh
 
 sso-bootstrap: helm-repos
+	# Support INSTALL_DRY_RUN=1 to print actions instead of performing changes.
+	if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+		echo "[dry-run] INSTALL_DRY_RUN=1 - showing actions that would be performed"; \
+	fi
+
 	# Auto-detect LAN and (optionally) adjust MetalLB pool.
 	if [ "${WRITE_METALLB}" = "1" ]; then \
-	  echo "[network] Detecting + writing MetalLB pool (override with WRITE_METALLB=0)"; \
-	  python3 tools/scripts/configure_network.py --write || true; \
+		echo "[network] Detecting + writing MetalLB pool (override with WRITE_METALLB=0)"; \
+		if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+			echo "[dry-run] python3 tools/scripts/configure_network.py --write"; \
+		else \
+			python3 tools/scripts/configure_network.py --write || true; \
+		fi; \
 	else \
-	  echo "[network] Dry-run detection only (set WRITE_METALLB=1 to apply changes)"; \
-	  python3 tools/scripts/configure_network.py || true; \
+		echo "[network] Dry-run detection only (set WRITE_METALLB=1 to apply changes)"; \
+		if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+			echo "[dry-run] python3 tools/scripts/configure_network.py"; \
+		else \
+			python3 tools/scripts/configure_network.py || true; \
+		fi; \
 	fi
 
-	helm upgrade --install kratos ory/kratos -n "$NAMESPACE_SSO" -f deploy/ory/kratos-values.yaml
-	helm upgrade --install hydra ory/hydra -n "$NAMESPACE_SSO" -f deploy/ory/hydra-values.yaml
+	# Helm installs: only run if value files exist; in dry-run mode just print commands.
+	if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+		if [ -f deploy/ory/kratos-values.yaml ]; then \
+			echo "[dry-run] helm upgrade --install kratos ory/kratos -n \"$NAMESPACE_SSO\" -f deploy/ory/kratos-values.yaml"; \
+		else \
+			echo "[dry-run] Skipping kratos helm install: deploy/ory/kratos-values.yaml not found"; \
+		fi; \
+		if [ -f deploy/ory/hydra-values.yaml ]; then \
+			echo "[dry-run] helm upgrade --install hydra ory/hydra -n \"$NAMESPACE_SSO\" -f deploy/ory/hydra-values.yaml"; \
+		else \
+			echo "[dry-run] Skipping hydra helm install: deploy/ory/hydra-values.yaml not found"; \
+		fi; \
+	else \
+		if [ -f deploy/ory/kratos-values.yaml ]; then \
+			helm upgrade --install kratos ory/kratos -n "$NAMESPACE_SSO" -f deploy/ory/kratos-values.yaml; \
+		else \
+			echo "Skipping kratos install: deploy/ory/kratos-values.yaml not found"; \
+		fi; \
+		if [ -f deploy/ory/hydra-values.yaml ]; then \
+			helm upgrade --install hydra ory/hydra -n "$NAMESPACE_SSO" -f deploy/ory/hydra-values.yaml; \
+		else \
+			echo "Skipping hydra install: deploy/ory/hydra-values.yaml not found"; \
+		fi; \
+	fi
 
 	if [ "${OAUTH2_PROXY_REDIS_ENABLED}" = "true" ]; then \
-	  helm upgrade --install redis bitnami/redis -n "$NAMESPACE_SSO" -f deploy/redis/values.yaml; \
+		if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+			if [ -f deploy/redis/values.yaml ]; then \
+				echo "[dry-run] helm upgrade --install redis bitnami/redis -n \"$NAMESPACE_SSO\" -f deploy/redis/values.yaml"; \
+			else \
+				echo "[dry-run] Skipping redis install: deploy/redis/values.yaml not found"; \
+			fi; \
+		else \
+			if [ -f deploy/redis/values.yaml ]; then \
+				helm upgrade --install redis bitnami/redis -n "$NAMESPACE_SSO" -f deploy/redis/values.yaml; \
+			else \
+				echo "Skipping redis install: deploy/redis/values.yaml not found"; \
+			fi; \
+		fi; \
 	fi
-	helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy -n "$NAMESPACE_SSO" -f deploy/oauth2-proxy/values.yaml
+	if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+		if [ -f deploy/oauth2-proxy/values.yaml ]; then \
+			echo "[dry-run] helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy -n \"$NAMESPACE_SSO\" -f deploy/oauth2-proxy/values.yaml"; \
+		else \
+			echo "[dry-run] Skipping oauth2-proxy install: deploy/oauth2-proxy/values.yaml not found"; \
+		fi; \
+	else \
+		if [ -f deploy/oauth2-proxy/values.yaml ]; then \
+			helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy -n "$NAMESPACE_SSO" -f deploy/oauth2-proxy/values.yaml; \
+		else \
+			echo "Skipping oauth2-proxy install: deploy/oauth2-proxy/values.yaml not found"; \
+		fi; \
+	fi
 
 	# Start short-lived port-forwards (Hydra admin 4445, Vault 8200)
-	set -e
-	PF_HYDRA=""; PF_VAULT="";
-	trap '[[ -n "$PF_HYDRA" ]] && kill $PF_HYDRA 2>/dev/null || true; [[ -n "$PF_VAULT" ]] && kill $PF_VAULT 2>/dev/null || true' EXIT
-	(kubectl -n "$NAMESPACE_SSO" port-forward svc/hydra-admin 4445:4445 >/tmp/pf_hydra.log 2>&1 & echo $! > /tmp/pf_hydra.pid)
-	sleep 2
-	PF_HYDRA=$(cat /tmp/pf_hydra.pid || true)
-	(kubectl -n "$NAMESPACE_INFRA" port-forward svc/vault 8200:8200 >/tmp/pf_vault.log 2>&1 & echo $! > /tmp/pf_vault.pid) || true
-	sleep 2
-	PF_VAULT=$(cat /tmp/pf_vault.pid || true)
-
-	# Use localhost endpoints for admin APIs
-	export HYDRA_ADMIN_URL="http://127.0.0.1:4445"
-	export VAULT_ADDR="http://127.0.0.1:8200"
+	if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+		echo "[dry-run] kubectl -n \"$NAMESPACE_SSO\" port-forward svc/hydra-admin 4445:4445 &"; \
+		echo "[dry-run] kubectl -n \"$NAMESPACE_INFRA\" port-forward svc/vault 8200:8200 &"; \
+		export HYDRA_ADMIN_URL="http://127.0.0.1:4445"; \
+		export VAULT_ADDR="http://127.0.0.1:8200"; \
+	else \
+		set -e; \
+		PF_HYDRA=""; PF_VAULT=""; \
+		trap '[[ -n "$PF_HYDRA" ]] && kill $PF_HYDRA 2>/dev/null || true; [[ -n "$PF_VAULT" ]] && kill $PF_VAULT 2>/dev/null || true' EXIT; \
+		(kubectl -n "$NAMESPACE_SSO" port-forward svc/hydra-admin 4445:4445 >/tmp/pf_hydra.log 2>&1 & echo $! > /tmp/pf_hydra.pid); \
+		sleep 2; PF_HYDRA=$(cat /tmp/pf_hydra.pid || true); \
+		(kubectl -n "$NAMESPACE_INFRA" port-forward svc/vault 8200:8200 >/tmp/pf_vault.log 2>&1 & echo $! > /tmp/pf_vault.pid) || true; \
+		sleep 2; PF_VAULT=$(cat /tmp/pf_vault.pid || true); \
+		export HYDRA_ADMIN_URL="http://127.0.0.1:4445"; \
+		export VAULT_ADDR="http://127.0.0.1:8200"; \
+	fi
 
 	# Vault onboarding (requires VAULT_TOKEN). Skip if not present.
 	if [ -n "${VAULT_TOKEN:-}" ]; then \
-	  echo "Running Vault onboarding with VAULT_TOKEN (k8s auth + ESO role)"; \
-	  bash tools/scripts/vault_k8s_onboard.sh || true; \
+		if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+			echo "[dry-run] bash tools/scripts/vault_k8s_onboard.sh"; \
+		else \
+			echo "Running Vault onboarding with VAULT_TOKEN (k8s auth + ESO role)"; \
+			bash tools/scripts/vault_k8s_onboard.sh || true; \
+		fi; \
 	else \
-	  echo "VAULT_TOKEN not set; skipping Vault onboarding. Set VAULT_TOKEN and re-run sso-bootstrap to enable."; \
+		echo "VAULT_TOKEN not set; skipping Vault onboarding. Set VAULT_TOKEN and re-run sso-bootstrap to enable."; \
 	fi
 
-	# Register Hydra clients idempotently
-	python3 tools/scripts/hydra_clients.py --admin "$HYDRA_ADMIN_URL" --domain "$DOMAIN" --config deploy/ory/clients.yaml
+	# Register Hydra clients idempotently (only if clients config exists)
+	if [ -f deploy/ory/clients.yaml ]; then \
+		if [ "${INSTALL_DRY_RUN}" = "1" ]; then \
+			echo "[dry-run] python3 tools/scripts/hydra_clients.py --admin \"$HYDRA_ADMIN_URL\" --domain \"$DOMAIN\" --config deploy/ory/clients.yaml"; \
+		else \
+			python3 tools/scripts/hydra_clients.py --admin "$HYDRA_ADMIN_URL" --domain "$DOMAIN" --config deploy/ory/clients.yaml; \
+		fi; \
+	else \
+		echo "Skipping Hydra client registration: deploy/ory/clients.yaml not found"; \
+	fi
 
 deploy-core: helm-repos
 	helm upgrade --install rabbitmq bitnami/rabbitmq -n "$NAMESPACE_CORE" -f deploy/rabbitmq/values.yaml
@@ -130,3 +204,6 @@ configure-network:
 # Initialize and/or unseal Vault with safe prompts and optional env file
 vault-init:
 	bash tools/scripts/vault_init.sh
+
+vault-init-dry:
+	VAULT_INIT_DRY_RUN=1 bash tools/scripts/vault_init.sh --dry-run

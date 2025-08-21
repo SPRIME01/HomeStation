@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/your-org/your-repo.git # REPLACE with actual repo or use self if using in-repo manifests
+    repoURL: https://github.com/SPRIME01/HomeStation.git
     targetRevision: HEAD
     path: deploy/argocd/apps
     directory:

@@ -4,6 +4,21 @@ set -euo pipefail
 NS="${NAMESPACE_INFRA:-infra}"
 SVC="${VAULT_SERVICE_NAME:-vault}"
 ENV_FILE="tools/secrets/.env.vault"
+DRY_RUN=0
+
+# parse args
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run|-n)
+      DRY_RUN=1; shift;;
+    *) shift;;
+  esac
+done
+
+# also respect env var for CI or Just usage
+if [ "${VAULT_INIT_DRY_RUN:-}" = "1" ] || [ "${INSTALL_DRY_RUN:-0}" = "1" ]; then
+  DRY_RUN=1
+fi
 
 if ! command -v vault >/dev/null 2>&1; then
   echo "ERROR: vault CLI not found. Install HashiCorp Vault CLI and try again."
@@ -70,6 +85,13 @@ if [[ "$initialized" == "false" ]]; then
     exit 0
   fi
 
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "(dry-run) Would run: vault operator init -key-shares=1 -key-threshold=1"
+    echo "(dry-run) Skipping actual init."
+    echo "(dry-run) Example output: Unseal Key 1: <redacted>\nInitial Root Token: <redacted>"
+    exit 0
+  fi
+
   echo "Initializing..."
   INIT_OUT=$(vault operator init -key-shares=1 -key-threshold=1)
   echo "===== IMPORTANT SECRETS (DISPLAY ONLY) ====="
@@ -99,7 +121,11 @@ if [[ "$sealed" == "true" ]]; then
     echo "No unseal key provided; aborting."
     exit 1
   fi
-  vault operator unseal "$UNSEAL_KEY" >/dev/null
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "(dry-run) Would run: vault operator unseal <provided-key>"
+  else
+    vault operator unseal "$UNSEAL_KEY" >/dev/null
+  fi
   echo "Unsealed."
 fi
 
@@ -115,9 +141,13 @@ if [[ "$HAS_TOKEN" -ne 1 ]]; then
   if [[ -z "$TOK" ]]; then
     echo "No token provided; continuing without exporting."
   else
-    export VAULT_TOKEN="$TOK"
-    echo "Exported VAULT_TOKEN for this process."
-    write_env_file "$TOK"
+    if [ "$DRY_RUN" = "1" ]; then
+      echo "(dry-run) Would export VAULT_TOKEN and offer to write $ENV_FILE"
+    else
+      export VAULT_TOKEN="$TOK"
+      echo "Exported VAULT_TOKEN for this process."
+      write_env_file "$TOK"
+    fi
   fi
 fi
 

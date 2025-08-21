@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Environment variable summary (key overrides):
+#   SKIP_CILIUM=true              -> Do not install/upgrade Cilium (detect existing CNI only)
+#   CILIUM_KUBE_PROXY_REPLACEMENT_DEFAULT=true|false -> Default kubeProxyReplacement when kube-proxy absent
+#   CILIUM_TAINT_WAIT=1|0         -> Wait for removal of node.cilium.io/agent-not-ready taint before ArgoCD helm install
+#   CILIUM_TAINT_TIMEOUT=seconds  -> Max seconds to wait for taint clearance (default 300)
+#   FLANNEL_CLEANUP=1|0           -> Remove legacy flannel.* annotations from nodes once Cilium active
+#   GITOPS_BOOTSTRAP=1|0          -> Skip direct installs of components managed via ArgoCD Applications
+#   SKIP_ARGOCD=1|0               -> Skip ArgoCD install entirely
+#   INSTALL_DRY_RUN=1|0           -> Echo actions without executing cluster changes
+#   ADOPT_EXISTING=1|0            -> Annotate/label pre-existing resources for Helm adoption (generic)
+#   METALLB_PURGE=1               -> Force delete metallb-system namespace before re-install (non-GitOps mode)
+#   METALLB_ADOPT=1               -> Annotate/label existing MetalLB resources for adoption
+
 SKIP_CILIUM=${SKIP_CILIUM:-false}
 INSTALL_DRY_RUN=${INSTALL_DRY_RUN:-0}
 METALLB_PURGE=${METALLB_PURGE:-0}
@@ -16,6 +29,10 @@ NAMESPACE_SSO=${NAMESPACE_SSO:-sso}
 NAMESPACE_CORE=${NAMESPACE_CORE:-core}
 NAMESPACE_OBS=${NAMESPACE_OBS:-observability}
 CILIUM_KUBE_PROXY_REPLACEMENT_DEFAULT=${CILIUM_KUBE_PROXY_REPLACEMENT_DEFAULT:-true}
+# New behavior flags
+CILIUM_TAINT_WAIT=${CILIUM_TAINT_WAIT:-1}            # Wait for node.cilium.io/agent-not-ready taint to clear before ArgoCD install
+CILIUM_TAINT_TIMEOUT=${CILIUM_TAINT_TIMEOUT:-300}     # Seconds to wait for taint removal
+FLANNEL_CLEANUP=${FLANNEL_CLEANUP:-0}                 # If 1 and Cilium active, remove stale flannel.* annotations from nodes
 
 say(){ printf '%s\n' "$*"; }
 run(){ if [ "$INSTALL_DRY_RUN" = "1" ]; then echo "(dry-run) $*"; else eval "$@"; fi }
@@ -63,6 +80,15 @@ detect_cni(){
     if kubectl get ds -n kube-system "$ds" >/dev/null 2>&1; then
       echo "$ds"; return 0; fi
   done
+  # Additional flannel heuristics (covers k3s and some distros where flannel runs differently)
+  # 1. ConfigMap kube-flannel-cfg (classic)
+  if kubectl get cm -n kube-system kube-flannel-cfg >/dev/null 2>&1; then
+    echo flannel; return 0; fi
+  # 2. Node annotations injected by flannel
+  if kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.annotations.flannel\..alpha\.coreos\.com/backend-type}{" "}{end}' 2>/dev/null | grep -qi .; then
+    echo flannel; return 0; fi
+  if kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip}{" "}{end}' 2>/dev/null | grep -qi .; then
+    echo flannel; return 0; fi
   if kubectl get pods -n kube-system -o name 2>/dev/null | grep -E '(cilium|flannel|calico|weave|antrea|kube-router|ovn)' >/dev/null; then
     kubectl get pods -n kube-system -o name | grep -E '(cilium|flannel|calico|weave|antrea|kube-router|ovn)' | head -n1 | sed 's#.*/##'; return 0; fi
   return 1
@@ -70,6 +96,7 @@ detect_cni(){
 
 existing_cni=$(detect_cni || true)
 if echo "$existing_cni" | grep -q '^\['; then existing_cni=""; fi
+say "[cni] Detected CNI: ${existing_cni:-<none>}"
 
 # Namespaces
 for ns in "$NAMESPACE_INFRA" "$NAMESPACE_SSO" "$NAMESPACE_CORE" "$NAMESPACE_OBS"; do
@@ -108,6 +135,18 @@ if [ "$SKIP_CILIUM" != "true" ]; then
       if ! kubectl rollout status ds/cilium -n kube-system --timeout=300s >/dev/null 2>&1; then
         say "[warn] Cilium did not become Ready within timeout; subsequent installs may time out (node taint node.cilium.io/agent-not-ready)."
       fi
+    fi
+    # Optional cleanup of historical flannel annotations once Cilium is active
+    if [ "$FLANNEL_CLEANUP" = "1" ]; then
+      for node in $(kubectl get nodes -o name 2>/dev/null); do
+        ann_to_remove=$(kubectl get $node -o json 2>/dev/null | jq -r '.metadata.annotations | to_entries[]? | select(.key|startswith("flannel.alpha.coreos.com")) | .key' 2>/dev/null || true)
+        if [ -n "$ann_to_remove" ]; then
+          say "[cni] Cleaning flannel annotations on $node"
+          for ann in $ann_to_remove; do
+            run "kubectl annotate $node ${ann}- >/dev/null 2>&1" || true
+          done
+        fi
+      done
     fi
   fi
 else
@@ -245,6 +284,23 @@ fi
 
 # ArgoCD adoption (generalized)
 if [ "$SKIP_ARGOCD" != "1" ]; then
+  # Optionally wait for cilium taint clearance before attempting ArgoCD helm install (to avoid hook Job Pending)
+  if [ "$CILIUM_TAINT_WAIT" = "1" ] && kubectl get nodes -o jsonpath='{.items[*].spec.taints[*].key}' 2>/dev/null | grep -q 'node.cilium.io/agent-not-ready'; then
+    say "[cilium] Waiting for node.cilium.io/agent-not-ready taint to clear (timeout ${CILIUM_TAINT_TIMEOUT}s)"
+    start_ts=$(date +%s)
+    while true; do
+      if ! kubectl get nodes -o jsonpath='{.items[*].spec.taints[*].key}' 2>/dev/null | grep -q 'node.cilium.io/agent-not-ready'; then
+        say "[cilium] Taint cleared"
+        break
+      fi
+      now=$(date +%s); elapsed=$(( now - start_ts ))
+      if [ $elapsed -ge $CILIUM_TAINT_TIMEOUT ]; then
+        say "[warn] Cilium taint still present after ${CILIUM_TAINT_TIMEOUT}s; continuing anyway"
+        break
+      fi
+      sleep 5
+    done
+  fi
   adopt_release_resources \
     argocd argocd 'argocd' \
     'clusterrole,clusterrolebinding,validatingwebhookconfigurations.admissionregistration.k8s.io,mutatingwebhookconfigurations.admissionregistration.k8s.io' \

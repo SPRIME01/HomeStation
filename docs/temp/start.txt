@@ -1,0 +1,15 @@
+# 0) network + (optional) skip cilium for now
+just configure-network
+export SKIP_CILIUM=true          # or: SKIP_CILIUM=true just install-foundation
+just install-foundation
+
+# 1) vault init/unseal/token (non-destructive, idempotent)
+just vault-init
+
+# 2) SSO + Redis sessions + clients + Vault K8s onboarding
+just sso-bootstrap
+
+# 3) rest of the stack
+just deploy-core
+just deploy-obs
+just deploy-ux

@@ -1,9 +1,13 @@
 redis:
-  secretInit:
-    tolerations:
-      - key: "node.cilium.io/agent-not-ready"
-        operator: "Exists"
-        effect: "NoSchedule"
+  # Existing redis password secret already present; ensure chart uses it and disables secret-init job
+  existingSecret: argocd-redis
+  tolerations:
+    - key: "node.cilium.io/agent-not-ready"
+      operator: "Exists"
+      effect: "NoSchedule"
+# Disable the redis secret initialization hook job (correct key per chart: redisSecretInit.enabled)
+redisSecretInit:
+  enabled: false
 controller:
   tolerations:
     - key: "node.cilium.io/agent-not-ready"

@@ -1,0 +1,180 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Swap / temp files
+*~
+*.swp
+*.swo
+.*.swp
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime / system files
+.DRIVELET_CACHE
+.vagrant/
+.vagrant.d/
+.kube/
+docker-compose.override.yml
+
+# Environment / secrets (keep example files in the repo, ignore actual secrets)
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# Node
+node_modules/
+.pnpm-store/
+.cache/
+.npm/
+.nyc_output/
+coverage/
+dist/
+build/
+.tmp/
+.next/
+out/
+
+# Package manager lock files (usually committed) - uncomment only if you prefer ignoring them
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+pip-wheel-metadata/
+pip-log.txt
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Virtualenv / Pipenv / Poetry
+pipenv/
+.python-version
+.venv/
+venv/
+poetry.lock
+
+# Go
+/bin/
+/pkg/
+/vendor/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Rust
+/target/
+/**/*.rs.bk
+
+# Java / JVM
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+*.class
+*.log
+hs_err_pid*
+
+# .NET / Visual Studio
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.code-workspace
+*.tmproj
+*.sublime-project
+*.sublime-workspace
+
+# JetBrains
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Containers / Docker
+docker-compose.override.yml
+.docker/
+docker-compose.*.yml
+**/.dockerignore
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+override.tf
+override.tf.json
+terraform.tfvars
+terraform.tfvars.json
+*.tfvars
+
+# Kubernetes / Helm
+*.kubeconfig
+helm-debug.log
+
+# CI / build artifacts
+coverage/
+reports/
+dist/
+build/
+packages/
+release/
+
+# Archives
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+
+# Misc
+*.bak
+*.tmp
+*.orig
+*.rej
+
+# Optional: Home Assistant / IoT-specific items (uncomment if applicable)
+# .storage/
+# .cloud/
+# .HA_VERSION
+
