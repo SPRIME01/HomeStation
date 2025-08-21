@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "service": {
+      "factory": "./src/generators/service/generator#serviceGenerator",
+      "schema": "./src/generators/service/schema.json",
+      "description": "Generate a FastAPI service with K8s manifests + ExternalSecret"
+    }
+  }
+}

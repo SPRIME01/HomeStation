@@ -1,0 +1,410 @@
+{
+  "generated_at": "2025-08-21T00:38:43.659051+00:00",
+  "dry_run": false,
+  "summary": {
+    "PASS": 48,
+    "WARN": 1,
+    "FAIL": 16,
+    "SKIP": 0
+  },
+  "sections": {
+    "OS & Platform": [
+      {
+        "check": "OS",
+        "level": "PASS",
+        "message": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39 (WSL2=True)",
+        "fix": ""
+      },
+      {
+        "check": "systemd",
+        "level": "PASS",
+        "message": "systemd active",
+        "fix": ""
+      },
+      {
+        "check": "virtualization",
+        "level": "PASS",
+        "message": "VMX/SVM present",
+        "fix": "Enable virtualization in BIOS/UEFI"
+      },
+      {
+        "check": "k3s-install",
+        "level": "FAIL",
+        "message": "k3s dirs missing",
+        "fix": "Install k3s via rancher installer or verify permissions"
+      }
+    ],
+    "CLI Tooling": [
+      {
+        "check": "kubectl",
+        "level": "PASS",
+        "message": "clientVersion:",
+        "fix": ""
+      },
+      {
+        "check": "helm",
+        "level": "PASS",
+        "message": "v3.18.3+g6838ebc",
+        "fix": ""
+      },
+      {
+        "check": "k3s",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install k3s and ensure it is on PATH"
+      },
+      {
+        "check": "docker",
+        "level": "PASS",
+        "message": "Docker version 28.1.1-rd, build 4d7f01e",
+        "fix": ""
+      },
+      {
+        "check": "nerdctl",
+        "level": "PASS",
+        "message": "wsl: Failed to translate '\\\\wsl.localhost\\Ubuntu\\home\\prime\\homestation'",
+        "fix": ""
+      },
+      {
+        "check": "ctr",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install ctr and ensure it is on PATH"
+      },
+      {
+        "check": "pulumi",
+        "level": "PASS",
+        "message": "v3.187.0",
+        "fix": ""
+      },
+      {
+        "check": "ansible",
+        "level": "PASS",
+        "message": "ansible [core 2.16.3]",
+        "fix": ""
+      },
+      {
+        "check": "argocd",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install argocd and ensure it is on PATH"
+      },
+      {
+        "check": "vault",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install vault and ensure it is on PATH"
+      },
+      {
+        "check": "sops",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install sops and ensure it is on PATH"
+      },
+      {
+        "check": "age",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install age and ensure it is on PATH"
+      },
+      {
+        "check": "cosign",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install cosign and ensure it is on PATH"
+      },
+      {
+        "check": "syft",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install syft and ensure it is on PATH"
+      },
+      {
+        "check": "trivy",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install trivy and ensure it is on PATH"
+      },
+      {
+        "check": "git",
+        "level": "PASS",
+        "message": "git version 2.43.0",
+        "fix": ""
+      },
+      {
+        "check": "node",
+        "level": "PASS",
+        "message": "v22.18.0",
+        "fix": ""
+      },
+      {
+        "check": "pnpm",
+        "level": "PASS",
+        "message": "WARN\u2009 The \"workspaces\" field in package.json is not supported by pnpm. Create a \"pnpm-workspace.yaml\" file instead.",
+        "fix": ""
+      },
+      {
+        "check": "python3",
+        "level": "PASS",
+        "message": "Python 3.12.3",
+        "fix": ""
+      },
+      {
+        "check": "uv",
+        "level": "PASS",
+        "message": "uv 0.8.12",
+        "fix": ""
+      },
+      {
+        "check": "rdctl",
+        "level": "PASS",
+        "message": "rdctl client version: v1.19.3, targeting server version: v1",
+        "fix": ""
+      },
+      {
+        "check": "redis-cli",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Install redis-cli and ensure it is on PATH"
+      }
+    ],
+    "Kubernetes": [
+      {
+        "check": "cluster",
+        "level": "PASS",
+        "message": "cluster reachable",
+        "fix": "Ensure kubeconfig / KUBECONFIG and k3s/rancher are running"
+      },
+      {
+        "check": "node-sample",
+        "level": "PASS",
+        "message": "homestation   Ready    control-plane,master   22d   v1.33.3+k3s1   192.168.127.2   <none>        Rancher Desktop WSL Distribution   6.6.87.2-microsoft-standard-WSL2   containerd://2.0.0",
+        "fix": ""
+      },
+      {
+        "check": "cni",
+        "level": "PASS",
+        "message": "unknown",
+        "fix": ""
+      },
+      {
+        "check": "traefik",
+        "level": "PASS",
+        "message": "Traefik service detected",
+        "fix": ""
+      },
+      {
+        "check": "metallb",
+        "level": "PASS",
+        "message": "metallb-system namespace present",
+        "fix": "Install MetalLB and configure IPAddressPool + L2Advertisement"
+      },
+      {
+        "check": "argocd",
+        "level": "PASS",
+        "message": "argocd namespace present",
+        "fix": "Install Argo CD (GitOps)"
+      },
+      {
+        "check": "external-secrets",
+        "level": "FAIL",
+        "message": "ESO not detected",
+        "fix": "Install External Secrets Operator and configure Vault ClusterSecretStore"
+      },
+      {
+        "check": "vault",
+        "level": "PASS",
+        "message": "vault namespace present",
+        "fix": "Deploy Vault with Raft + TLS; enable k8s auth"
+      },
+      {
+        "check": "ory",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Deploy Kratos + Hydra and consent UI"
+      },
+      {
+        "check": "supabase",
+        "level": "PASS",
+        "message": "namespace present",
+        "fix": "Deploy Supabase; expose only Kong (8000/8443)"
+      },
+      {
+        "check": "rabbitmq",
+        "level": "FAIL",
+        "message": "not installed",
+        "fix": "Deploy RabbitMQ; mgmt internal; metrics 15692"
+      },
+      {
+        "check": "observability",
+        "level": "FAIL",
+        "message": "not detected",
+        "fix": "Deploy docker-otel-lgtm (Grafana/Tempo/Loki/Mimir)"
+      },
+      {
+        "check": "rancher",
+        "level": "FAIL",
+        "message": "not detected",
+        "fix": "Deploy Rancher (cattle-system) if centralized mgmt desired"
+      },
+      {
+        "check": "rdctl",
+        "level": "PASS",
+        "message": "rdctl client version: v1.19.3, targeting server version: v1",
+        "fix": ""
+      }
+    ],
+    "Host Ports": [
+      {
+        "check": "port:80",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:443",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:3000",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4000",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4317",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4318",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4433",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4434",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4444",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4445",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:4822",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:5000",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:5672",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:5678",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:6443",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:8000",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:8080",
+        "level": "WARN",
+        "message": "Listening on host: ArgoCD local pf / Guacamole alt web",
+        "fix": "If this should be cluster-only, remove host binds and expose via Traefik"
+      },
+      {
+        "check": "port:8200",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:8201",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:8443",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:9345",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:9999",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:15672",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:15692",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      },
+      {
+        "check": "port:19999",
+        "level": "PASS",
+        "message": "no host bind detected",
+        "fix": ""
+      }
+    ]
+  }
+}

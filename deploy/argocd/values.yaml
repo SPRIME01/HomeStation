@@ -1,0 +1,31 @@
+redis:
+  secretInit:
+    tolerations:
+      - key: "node.cilium.io/agent-not-ready"
+        operator: "Exists"
+        effect: "NoSchedule"
+controller:
+  tolerations:
+    - key: "node.cilium.io/agent-not-ready"
+      operator: "Exists"
+      effect: "NoSchedule"
+repoServer:
+  tolerations:
+    - key: "node.cilium.io/agent-not-ready"
+      operator: "Exists"
+      effect: "NoSchedule"
+server:
+  tolerations:
+    - key: "node.cilium.io/agent-not-ready"
+      operator: "Exists"
+      effect: "NoSchedule"
+applicationSet:
+  tolerations:
+    - key: "node.cilium.io/agent-not-ready"
+      operator: "Exists"
+      effect: "NoSchedule"
+notifications:
+  tolerations:
+    - key: "node.cilium.io/agent-not-ready"
+      operator: "Exists"
+      effect: "NoSchedule"

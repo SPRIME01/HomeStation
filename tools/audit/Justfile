@@ -1,0 +1,34 @@
+# tools/audit layout assumed. Adjust paths if you prefer elsewhere.
+set shell := ["bash", "-cu"]
+
+# Ensure Python is present; fall back to 'python' if python3 missing
+python := `if command -v python3 >/dev/null 2>&1; then echo python3; else echo python; fi`
+root := justfile_directory()
+
+# Full audit: Python (JSON + Markdown)
+audit:
+	@mkdir -p {{root}}/reports
+	@{{python}} {{root}}/audit_readiness.py --format both --out {{root}}/reports
+
+# Dry run (no external command execution)
+audit-dry-run:
+	@echo "(dry-run) quick shell audit"
+	@DRY_RUN=1 bash {{root}}/audit_wsl.sh
+	@echo "(dry-run) python audit"
+	@{{python}} {{root}}/audit_readiness.py --dry-run --format both --out {{root}}/reports
+
+# Fast, shallow checks using bash/cli only (no Python libs)
+audit-quick:
+	@bash {{root}}/audit_wsl.sh
+
+# Windows-side checks (run from Windows terminal)
+audit-windows:
+	@pwsh -NoProfile -ExecutionPolicy Bypass -File {{root}}/audit_windows.ps1
+
+# All-in one "doctor" aggregator
+doctor:
+	@echo "==> Running quick platform checks..."
+	@bash {{root}}/audit_wsl.sh || true
+	@echo "==> Running full Python audit..."
+	@{{python}} {{root}}/audit_readiness.py --format both --out {{root}}/reports || true
+	@echo "==> Done. See {{root}}/reports/readiness.md"

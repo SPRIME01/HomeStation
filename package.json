@@ -1,0 +1,15 @@
+{
+  "name": "homelab-scaffold",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9",
+  "scripts": { "nx": "nx", "postinstall": "node tools/postinstall.js" },
+  "devDependencies": {
+    "nx": "^19.8.0",
+    "typescript": "^5.4.0",
+    "@nx/js": "^19.8.0",
+    "@nx/workspace": "^19.8.0",
+    "ts-node": "^10.9.2"
+  },
+  "workspaces": ["tools/plugins/*"]
+}
