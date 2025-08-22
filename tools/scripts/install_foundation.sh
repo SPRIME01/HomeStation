@@ -34,6 +34,11 @@ CILIUM_TAINT_WAIT=${CILIUM_TAINT_WAIT:-1}            # Wait for node.cilium.io/a
 CILIUM_TAINT_TIMEOUT=${CILIUM_TAINT_TIMEOUT:-300}     # Seconds to wait for taint removal
 FLANNEL_CLEANUP=${FLANNEL_CLEANUP:-0}                 # If 1 and Cilium active, remove stale flannel.* annotations from nodes
 
+# Optional overrides for Cilium CNI locations. Useful for special distros like Rancher Desktop.
+# Defaults target k3s typical paths; set to /usr/libexec/cni and /etc/cni/net.d on Rancher Desktop if you choose Option 3.
+CILIUM_CNI_BIN_PATH=${CILIUM_CNI_BIN_PATH:-/var/lib/rancher/k3s/data/agent/bin}
+CILIUM_CNI_CONF_PATH=${CILIUM_CNI_CONF_PATH:-/var/lib/rancher/k3s/agent/etc/cni/net.d}
+
 say(){ printf '%s\n' "$*"; }
 run(){ if [ "$INSTALL_DRY_RUN" = "1" ]; then echo "(dry-run) $*"; else eval "$@"; fi }
 exists(){ command -v "$1" >/dev/null 2>&1; }
@@ -103,6 +108,18 @@ for ns in "$NAMESPACE_INFRA" "$NAMESPACE_SSO" "$NAMESPACE_CORE" "$NAMESPACE_OBS"
   run "kubectl get ns $ns >/dev/null 2>&1 || kubectl create ns $ns"
 done
 
+# External Secrets Operator (CRDs + controller) – expected by later recipes
+if [ "$GITOPS_BOOTSTRAP" != "1" ]; then
+  if ! kubectl get crd externalsecrets.external-secrets.io >/dev/null 2>&1; then
+    say "[eso] Installing External Secrets Operator (CRDs)"
+  else
+    say "[eso] External Secrets CRDs present – ensuring Helm release installed"
+  fi
+  run "helm upgrade --install external-secrets external-secrets/external-secrets -n $NAMESPACE_INFRA --create-namespace --set installCRDs=true" || true
+else
+  say "[eso] Skipping External Secrets (GitOps bootstrap mode)"
+fi
+
 if [ "$GITOPS_BOOTSTRAP" = "1" ]; then
   say "[mode] GitOps bootstrap enabled (GITOPS_BOOTSTRAP=1): direct helm installs for app components will be skipped; ArgoCD will reconcile them via Applications."
 fi
@@ -124,11 +141,19 @@ if [ "$SKIP_CILIUM" != "true" ]; then
       # No kube-proxy DaemonSet => enable replacement
       kpr_mode=${CILIUM_KUBE_PROXY_REPLACEMENT_DEFAULT}
     fi
-    say "Installing Cilium (kubeProxyReplacement=$kpr_mode)"
-    run "helm upgrade --install cilium cilium/cilium -n kube-system \
-      --set kubeProxyReplacement=$kpr_mode \
-      --set cgroup.autoMount.enabled=true \
-      --set cgroup.hostRoot=/sys/fs/cgroup || true"
+      # Rancher Desktop detection for friendly guidance (node usually named 'rancher-desktop')
+      if kubectl get node rancher-desktop >/dev/null 2>&1; then
+        say "[detect] Rancher Desktop node detected. If pods fail to schedule with CNI errors for 'cilium-cni' under /usr/libexec/cni, follow docs/rancher-desktop-cilium.md (Option 1 recommended)."
+        if [ "$CILIUM_CNI_BIN_PATH" != "/usr/libexec/cni" ]; then
+          say "[hint] Current Cilium install will target binPath=$CILIUM_CNI_BIN_PATH, confPath=$CILIUM_CNI_CONF_PATH. Kubelet on Rancher Desktop often uses /usr/libexec/cni. To force Option 3, re-run with CILIUM_CNI_BIN_PATH=/usr/libexec/cni CILIUM_CNI_CONF_PATH=/etc/cni/net.d."
+        fi
+      fi
+      say "Installing Cilium (kubeProxyReplacement=$kpr_mode)"
+      # Build Helm flags with optional overrides
+      cilium_extra="--set kubeProxyReplacement=$kpr_mode --set cgroup.autoMount.enabled=false"
+      [ -n "$CILIUM_CNI_BIN_PATH" ] && cilium_extra="$cilium_extra --set cni.binPath=$CILIUM_CNI_BIN_PATH"
+      [ -n "$CILIUM_CNI_CONF_PATH" ] && cilium_extra="$cilium_extra --set cni.confPath=$CILIUM_CNI_CONF_PATH"
+      run "helm upgrade --install cilium cilium/cilium -n kube-system $cilium_extra || true"
     # Wait for Cilium readiness to avoid downstream timeouts (e.g., ArgoCD hooks) if possible
     if [ "$INSTALL_DRY_RUN" != "1" ]; then
       say "[cilium] Waiting for DaemonSet readiness (timeout 300s)"
@@ -227,6 +252,34 @@ if [ "$GITOPS_BOOTSTRAP" != "1" ]; then
     [ $any -eq 0 ] && say "[metallb] No namespaced objects found to adopt"
   }
 
+  # Install MetalLB first to ensure CRDs exist
+  if ! run "helm upgrade --install metallb metallb/metallb -n metallb-system --create-namespace"; then
+    if [ "$INSTALL_DRY_RUN" = "1" ]; then
+      say "[metallb] (dry-run) would retry helm install after adoption"
+    else
+      if helm status metallb -n metallb-system >/dev/null 2>&1; then
+        say "[metallb] Helm release exists despite error; continuing"
+      else
+        say "[metallb] Helm install failed — attempting adoption + retry"
+        adopt_metallb_cluster_scoped; adopt_metallb_namespaced || true
+        helm upgrade --install metallb metallb/metallb -n metallb-system --create-namespace
+      fi
+    fi
+  fi
+
+  # Wait briefly for CRDs to register before applying pools
+  if [ "$INSTALL_DRY_RUN" != "1" ]; then
+    say "[metallb] Waiting for CRDs (IPAddressPools/L2Advertisements)"
+    for i in $(seq 1 30); do
+      if kubectl api-resources 2>/dev/null | grep -qiE '^ipaddresspools\.|ipaddresspool '; then
+        break
+      fi
+      sleep 1
+      [ $i -eq 30 ] && say "[metallb] CRDs not visible yet; continuing anyway" || true
+    done
+  fi
+
+  # Apply our pool manifest now that CRDs should be present
   if [ -f deploy/metallb/ipaddresspool.yaml ]; then
     run "kubectl apply -f deploy/metallb/ipaddresspool.yaml"
   elif [ "$METALLB_GENERATE_POOL" = "1" ]; then
@@ -253,20 +306,6 @@ EOF
     run "kubectl apply -f deploy/metallb/ipaddresspool.yaml"
   else
     echo "[warn] missing deploy/metallb/ipaddresspool.yaml (skipping)"
-  fi
-
-  if ! run "helm upgrade --install metallb metallb/metallb -n metallb-system --create-namespace"; then
-    if [ "$INSTALL_DRY_RUN" = "1" ]; then
-      say "[metallb] (dry-run) would retry helm install after adoption"
-    else
-      if helm status metallb -n metallb-system >/dev/null 2>&1; then
-        say "[metallb] Helm release exists despite error; continuing"
-      else
-        say "[metallb] Helm install failed — attempting adoption + retry"
-        adopt_metallb_cluster_scoped; adopt_metallb_namespaced || true
-        helm upgrade --install metallb metallb/metallb -n metallb-system --create-namespace
-      fi
-    fi
   fi
 else
   say "[metallb] Skipping direct install (GitOps bootstrap mode)"

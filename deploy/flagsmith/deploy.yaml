@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flagsmith
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flagsmith
+  template:
+    metadata:
+      labels:
+        app: flagsmith
+    spec:
+      containers:
+        - name: flagsmith
+          image: flagsmith/flagsmith:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DJANGO_ALLOWED_HOSTS
+              value: "*"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: flagsmith-db
+                  key: url
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: flagsmith-app
+                  key: secret-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flagsmith
+spec:
+  selector:
+    app: flagsmith
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flagsmith
+spec:
+  ingressClassName: traefik
+  # Update host below if you changed DOMAIN (default homelab.lan)
+  rules:
+    - host: flagsmith.homelab.lan
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flagsmith
+                port:
+                  number: 8000
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: flagsmith-secrets
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-kv
+  target:
+    name: flagsmith-app
+    creationPolicy: Owner
+  data:
+    - secretKey: secret-key
+      remoteRef:
+        key: kv/data/apps/flagsmith/app
+        property: secret-key
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: flagsmith-db-secret
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: vault-kv
+  target:
+    name: flagsmith-db
+    creationPolicy: Owner
+  data:
+    - secretKey: url
+      remoteRef:
+        key: kv/data/apps/flagsmith/database
+        property: url

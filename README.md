@@ -27,6 +27,13 @@ export SKIP_CILIUM=true
 ```
 before running `just install-foundation`.
 
+If you're on Rancher Desktop and hit a CNI path error (kubelet expecting `/usr/libexec/cni`), see `docs/rancher-desktop-cilium.md`. You can also force our installer to target that path via:
+```bash
+export CILIUM_CNI_BIN_PATH=/usr/libexec/cni
+export CILIUM_CNI_CONF_PATH=/etc/cni/net.d
+just install-foundation
+```
+
 ### Vault one-click helper
 Initialize/unseal Vault and set a session token (optionally write `tools/secrets/.env.vault`):
 ```bash

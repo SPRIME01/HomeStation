@@ -1,0 +1,59 @@
+I'll update the plan status and guide targeted remediation to remove the conflicting flannel CNI, clear Cilium state, disable flannel in k3s, restart, and retest. Thanks for the detailed outputs—this pinpoints the cause.
+
+What we know:
+- Cilium is healthy overall but endpoint regenerations are failing due to BPF macro redefinition (classic stale state + conflicting CNI).
+- Node has BOTH CNI configs present:
+  - /etc/cni/net.d/05-cilium.conflist
+  - /etc/cni/net.d/10-flannel.conflist (+ .cilium_bak)
+- Kube-proxy replacement is on and Cilium is active. Flannel config lingering will cause conflicts, and combined with stale templates it yields the BPF compile errors you’re seeing.
+
+Fix sequence:
+1) Remove flannel CNI configs
+2) Clear Cilium BPF/templates state
+3) Restart Cilium (and RD on host to ensure kubelet sees clean CNI)
+4) Retest BusyBox pods
+
+Run these commands:
+
+- Purge flannel CNI configs and stale Cilium state on the node
+```sh
+NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
+
+kubectl debug node/$NODE -it --image=busybox:1.36 -- chroot /host sh -c '
+  set -e
+  echo "Removing flannel CNI configs..."
+  rm -f /etc/cni/net.d/10-flannel.conflist /etc/cni/net.d/10-flannel.conflist.cilium_bak 2>/dev/null || true
+  echo "Clearing Cilium state (BPF + templates)..."
+  rm -rf /var/lib/cilium/bpf/* /var/run/cilium/state/templates/* 2>/dev/null || true
+  echo "Resulting /etc/cni/net.d:"
+  ls -l /etc/cni/net.d || true
+'
+```
+
+- Restart Cilium (and RD if you’re on Rancher Desktop)
+```sh
+kubectl -n kube-system delete pod -l k8s-app=cilium
+# If Rancher Desktop: restart from the host shell or GUI
+rdctl shutdown && rdctl start
+```
+
+- Retest pod-to-pod networking
+```sh
+kubectl run pod-a --image=busybox:1.36 --restart=Never --command -- sh -c 'sleep 3600'
+kubectl run pod-b --image=busybox:1.36 --restart=Never --command -- sh -c 'sleep 3600'
+kubectl wait --for=condition=Ready pod/pod-a pod/pod-b --timeout=180s || { kubectl describe pod pod-a; kubectl describe pod pod-b; }
+AIP=$(kubectl get pod pod-a -o jsonpath='{.status.podIP}')
+kubectl exec pod-b -- ping -c 2 "$AIP"
+kubectl delete pod pod-a pod-b --ignore-not-found
+```
+
+If 05-cilium.conflist ever goes missing or Cilium rewrites it to a k3s path not read by kubelet, force the installer to target kubelet paths and reapply:
+```sh
+export CILIUM_CNI_BIN_PATH=/usr/libexec/cni
+export CILIUM_CNI_CONF_PATH=/etc/cni/net.d
+just install-foundation
+```
+
+Report back:
+- The ls -l /etc/cni/net.d after cleanup (should show only 05-cilium.conflist).
+- Whether the BusyBox pods became Ready and ping succeeded.
