@@ -1,8 +1,8 @@
+deploymentMode: SingleBinary
+
 loki:
-  # Use local filesystem storage for a simple, single-node setup
   storage:
     type: filesystem
-  # Use a built-in test schema to avoid complex schema configuration
   useTestSchema: true
 
 singleBinary:
@@ -11,7 +11,11 @@ singleBinary:
     enabled: true
     size: 5Gi
 
-# Disable Simple Scalable components when running singleBinary
+# Disable caches and SSD components for SingleBinary + filesystem
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
 write:
   replicas: 0
 read:
