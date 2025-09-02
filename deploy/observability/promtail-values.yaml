@@ -1,0 +1,12 @@
+daemonset:
+  enabled: true
+
+config:
+  enabled: true
+  # Send logs to Loki gateway in the same namespace
+  clients:
+    - url: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+      tenant_id: default
+  # Default snippets already discover pods and parse CRI logs
+  logLevel: info
+

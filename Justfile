@@ -109,12 +109,14 @@ deploy-obs +args='*':
 		echo "[dry-run] helm upgrade --install tempo grafana/tempo -n \"$NAMESPACE_OBS\" -f deploy/observability/tempo-values.yaml"; \
 		echo "[dry-run] helm upgrade --install mimir grafana/mimir-distributed -n \"$NAMESPACE_OBS\" -f deploy/observability/mimir-values.yaml"; \
 		echo "[dry-run] helm upgrade --install grafana grafana/grafana -n \"$NAMESPACE_OBS\" -f deploy/observability/grafana-values.yaml"; \
+		echo "[dry-run] helm upgrade --install promtail grafana/promtail -n \"$NAMESPACE_OBS\" -f deploy/observability/promtail-values.yaml"; \
 	else \
 		helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n "$NAMESPACE_OBS" -f deploy/observability/otel-values.yaml; \
 		helm upgrade --install loki grafana/loki -n "$NAMESPACE_OBS" -f deploy/observability/loki-values.yaml; \
 		helm upgrade --install tempo grafana/tempo -n "$NAMESPACE_OBS" -f deploy/observability/tempo-values.yaml; \
 		helm upgrade --install mimir grafana/mimir-distributed -n "$NAMESPACE_OBS" -f deploy/observability/mimir-values.yaml || true; \
 		helm upgrade --install grafana grafana/grafana -n "$NAMESPACE_OBS" -f deploy/observability/grafana-values.yaml; \
+		helm upgrade --install promtail grafana/promtail -n "$NAMESPACE_OBS" -f deploy/observability/promtail-values.yaml; \
 	fi
 
 deploy-ux +args='*':
