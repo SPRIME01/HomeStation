@@ -18,6 +18,7 @@ export HELM_REGISTRY_CONFIG := env_var_or_default("HELM_REGISTRY_CONFIG", ".helm
 export RABBITMQ_CHART_VERSION := env_var_or_default("RABBITMQ_CHART_VERSION", "16.0.14")
 export N8N_CHART_VERSION := env_var_or_default("N8N_CHART_VERSION", "1.15.2")
 export N8N_USE_COMMUNITY_VALUES := env_var_or_default("N8N_USE_COMMUNITY_VALUES", "1")
+export PROMTAIL_ENABLED := env_var_or_default("PROMTAIL_ENABLED", "0")
 
 # Safety switch: require explicit opt-in to WRITE MetalLB pool file.
 # Detection will still display proposed range. Set WRITE_METALLB=1 to apply.
@@ -109,14 +110,22 @@ deploy-obs +args='*':
 		echo "[dry-run] helm upgrade --install tempo grafana/tempo -n \"$NAMESPACE_OBS\" -f deploy/observability/tempo-values.yaml"; \
 		echo "[dry-run] helm upgrade --install mimir grafana/mimir-distributed -n \"$NAMESPACE_OBS\" -f deploy/observability/mimir-values.yaml"; \
 		echo "[dry-run] helm upgrade --install grafana grafana/grafana -n \"$NAMESPACE_OBS\" -f deploy/observability/grafana-values.yaml"; \
-		echo "[dry-run] helm upgrade --install promtail grafana/promtail -n \"$NAMESPACE_OBS\" -f deploy/observability/promtail-values.yaml"; \
+		if [ "${PROMTAIL_ENABLED}" = "1" ]; then \
+		  echo "[dry-run] helm upgrade --install promtail grafana/promtail -n \"$NAMESPACE_OBS\" -f deploy/observability/promtail-values.yaml"; \
+		else \
+		  echo "[dry-run] [skipped] promtail disabled (set PROMTAIL_ENABLED=1 to enable)"; \
+		fi; \
 	else \
 		helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n "$NAMESPACE_OBS" -f deploy/observability/otel-values.yaml; \
 		helm upgrade --install loki grafana/loki -n "$NAMESPACE_OBS" -f deploy/observability/loki-values.yaml; \
 		helm upgrade --install tempo grafana/tempo -n "$NAMESPACE_OBS" -f deploy/observability/tempo-values.yaml; \
 		helm upgrade --install mimir grafana/mimir-distributed -n "$NAMESPACE_OBS" -f deploy/observability/mimir-values.yaml || true; \
 		helm upgrade --install grafana grafana/grafana -n "$NAMESPACE_OBS" -f deploy/observability/grafana-values.yaml; \
-		helm upgrade --install promtail grafana/promtail -n "$NAMESPACE_OBS" -f deploy/observability/promtail-values.yaml; \
+		if [ "${PROMTAIL_ENABLED}" = "1" ]; then \
+		  helm upgrade --install promtail grafana/promtail -n "$NAMESPACE_OBS" -f deploy/observability/promtail-values.yaml; \
+		else \
+		  echo "[skip] promtail disabled (set PROMTAIL_ENABLED=1 to enable)"; \
+		fi; \
 	fi
 
 deploy-ux +args='*':

@@ -9,4 +9,11 @@ config:
       tenant_id: default
   # Default snippets already discover pods and parse CRI logs
   logLevel: info
-
+  snippets:
+    extraRelabelConfigs:
+      - action: keep
+        source_labels: [__meta_kubernetes_namespace]
+        regex: "observability|kube-system|default"
+      - action: keep
+        source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: "grafana|loki|tempo|mimir|opentelemetry-collector|promtail"
