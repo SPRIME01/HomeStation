@@ -158,6 +158,20 @@ deploy-core +args='*':
 	DRY=0; for a in {{args}}; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; \
 	just --set INSTALL_DRY_RUN "$DRY" helm-repos; \
 	INSTALL_DRY_RUN="$DRY" bash tools/scripts/deploy_core.sh
+
+# Check node open-files limit inside a short-lived pod in the observability namespace
+promtail-check +args='*':
+	NS="$NAMESPACE_OBS"; NAME="promtail-ulimit-check"; \
+	kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"; \
+	kubectl -n "$NS" delete pod "$NAME" --ignore-not-found >/dev/null 2>&1 || true; \
+	kubectl -n "$NS" run "$NAME" --image=busybox:1.36 --restart=Never --command -- sh -c 'cat /proc/self/limits | grep -i "open files" || true; sleep 8' >/dev/null; \
+	for i in $(seq 1 12); do \
+	  LOGS=$(kubectl -n "$NS" logs "$NAME" 2>/dev/null || true); [ -n "$LOGS" ] && break; \
+	  sleep 1; \
+	done; \
+	printf "\n[ulimit] %s\n\n" "${LOGS:-'(no output)'}"; \
+	kubectl -n "$NS" delete pod "$NAME" --ignore-not-found >/dev/null 2>&1 || true; \
+	echo "Tip: Aim for Max open files >= 1048576. See docs/diataxis/guide-promtail-ulimit.md";
 audit +args='*':
 	# Environment and cluster readiness checks; writes tools/audit/reports/
 	DRY=0; for a in {{args}}; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; \
