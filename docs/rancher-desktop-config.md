@@ -12,7 +12,7 @@ This document records the current Rancher Desktop (k3s) cluster choices, the CNI
 - Kubernetes version: v1.33.3+k3s1
 - Node name: `homestation` (single-node)
 - CNI: flannel (default for Rancher Desktop)
-- Cilium: intentionally removed / not active (SKIP_CILIUM=true)
+- Cilium: intentionally removed / not active (default skipped)
 - Ingress: Traefik (kube-system)
 - Observability: OTel Collector, Loki, Tempo, Grafana (deployed via repo)
 - Secrets: External Secrets Operator (ESO) installed
@@ -30,13 +30,7 @@ This document records the current Rancher Desktop (k3s) cluster choices, the CNI
 
 ## Important repo flags / environment
 
-- To keep flannel and skip Cilium for all `just` invocations:
-
-```bash
-# add to shell profile to persist across sessions
-echo 'export SKIP_CILIUM=true' >> ~/.zshrc
-source ~/.zshrc
-```
+- To keep flannel, no action is required. The installer defaults to skipping Cilium.
 
 - Run foundation installs (uses `SKIP_CILIUM`):
 
@@ -64,7 +58,7 @@ just install-foundation
 4. Observed Cilium BPF compile errors from stale templates in `/var/run/cilium/state/templates` and `/var/lib/cilium/bpf`.
 5. Cleared stale state, removed flannel conflist files (`/etc/cni/net.d/10-flannel.conflist`), and restarted Cilium. Endpoint regeneration still degraded and API timeouts persisted.
 6. Decided to revert to flannel permanently. Uninstalled Cilium and cleaned up Cilium artifacts (CNI conf & binary symlink, BPF pins, templates), restarted RD.
-7. Re-ran `just install-foundation` with `SKIP_CILIUM=true`. Fixed a small installer ordering bug (MetalLB CRDs) in repo.
+7. Re-ran `just install-foundation` (installer now defaults to skipping Cilium). Fixed a small installer ordering bug (MetalLB CRDs) in repo.
 8. Verified pod-to-pod networking on flannel with BusyBox ping; success.
 
 ---

@@ -3,7 +3,7 @@ set -euo pipefail
 
 NS="${NAMESPACE_INFRA:-infra}"
 SVC="${VAULT_SERVICE_NAME:-vault}"
-ENV_FILE="tools/secrets/.env.vault"
+ENV_FILE="tools/secrets/.envrc.vault"
 DRY_RUN=0
 
 # parse args
@@ -71,7 +71,9 @@ write_env_file() {
     mkdir -p "$(dirname "$ENV_FILE")"
     printf 'export VAULT_ADDR=%q\nexport VAULT_TOKEN=%q\n' "$VAULT_ADDR" "$token" > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
-    echo "Wrote $ENV_FILE (permissions 600). You can: source $ENV_FILE"
+    echo "Wrote $ENV_FILE (permissions 600)."
+    echo "Tip: Ensure your project .envrc contains:"
+    echo "  source_env_if_exists tools/secrets/.envrc.vault"
   else
     echo "Not writing env file. Remember to: export VAULT_TOKEN=<token>"
   fi

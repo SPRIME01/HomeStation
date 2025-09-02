@@ -69,7 +69,7 @@ before running `just install-foundation`.
 
 ### Vault one-click helper
 
-Initialize/unseal Vault and set a session token (optionally write `tools/secrets/.env.vault`):
+Initialize/unseal Vault and set a session token (optionally write `tools/secrets/.envrc.vault`):
 
 ```bash
 just vault-init
@@ -415,7 +415,7 @@ set -euo pipefail
 
 NS="\${NAMESPACE\_INFRA:-infra}"
 SVC="\${VAULT\_SERVICE\_NAME:-vault}"
-ENV\_FILE="tools/secrets/.env.vault"
+ENV\_FILE="tools/secrets/.envrc.vault"
 
 if ! command -v vault >/dev/null 2>&1; then
 echo "ERROR: vault CLI not found. Install HashiCorp Vault CLI and try again."

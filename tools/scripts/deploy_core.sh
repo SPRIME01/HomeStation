@@ -39,31 +39,42 @@ else
   fi
 fi
 
-# n8n: attempt index chart; if missing, try OCI and on secretservice error fallback to HTTPS .tgz when N8N_CHART_VERSION is provided
+# n8n: prefer community-charts index; otherwise fall back to Bitnami (index/OCI/HTTPS)
 if [ "$INSTALL_DRY_RUN" = "1" ]; then
-  say "[dry-run] n8n helm action (index or oci)"
+  say "[dry-run] n8n helm action (prefer community-charts, else bitnami or OCI)"
 else
-  if helm search repo bitnami/n8n 2>/dev/null | grep -q bitnami/n8n; then
-    HELM_REGISTRY_CONFIG="$HELM_REGISTRY_CONFIG" helm upgrade --install n8n bitnami/n8n -n "$NAMESPACE_CORE" -f deploy/n8n/values.yaml || true
+  # 1) Community Helm Charts repo (HTTPS index, no secretservice)
+  if helm search repo community-charts/n8n 2>/dev/null | grep -q community-charts/n8n; then
+    verflag=""; [ -n "$N8N_CHART_VERSION" ] && verflag="--version $N8N_CHART_VERSION"
+    valuesflag=""; if [ "${N8N_USE_COMMUNITY_VALUES:-0}" = "1" ] && [ -f deploy/n8n/community-values.yaml ]; then valuesflag="-f deploy/n8n/community-values.yaml"; fi
+    # Community chart; optionally use our values if explicitly enabled
+    helm upgrade --install n8n community-charts/n8n -n "$NAMESPACE_CORE" $verflag $valuesflag || true
   else
-    say "[info] bitnami/n8n not in index; using OCI artifact"
-    if ! HELM_REGISTRY_CONFIG="$HELM_REGISTRY_CONFIG" helm upgrade --install n8n oci://registry-1.docker.io/bitnamicharts/n8n -n "$NAMESPACE_CORE" -f deploy/n8n/values.yaml 2> >(tee /tmp/helm_n8n.err >&2); then
-      if grep -q 'org.freedesktop.secrets' /tmp/helm_n8n.err; then
-        if [ -n "$N8N_CHART_VERSION" ]; then
-          say "[warn] OCI fetch hit secretservice for n8n. Falling back to direct HTTPS chart download (version $N8N_CHART_VERSION)."
-          mkdir -p .cache/charts
-          CHART_URL="https://charts.bitnami.com/bitnami/n8n-${N8N_CHART_VERSION}.tgz"
-          if curl -fsSL "$CHART_URL" -o .cache/charts/n8n-${N8N_CHART_VERSION}.tgz; then
-            HELM_REGISTRY_CONFIG="$HELM_REGISTRY_CONFIG" helm upgrade --install n8n .cache/charts/n8n-${N8N_CHART_VERSION}.tgz -n "$NAMESPACE_CORE" -f deploy/n8n/values.yaml || true
+    # 2) Bitnami repo if present
+    if helm search repo bitnami/n8n 2>/dev/null | grep -q bitnami/n8n; then
+      verflag=""; [ -n "$N8N_CHART_VERSION" ] && verflag="--version $N8N_CHART_VERSION"
+      HELM_REGISTRY_CONFIG="$HELM_REGISTRY_CONFIG" helm upgrade --install n8n bitnami/n8n -n "$NAMESPACE_CORE" -f deploy/n8n/values.yaml $verflag || true
+    else
+      # 3) OCI artifact from Docker Hub (may hit secretservice); on secretservice error, fallback to HTTPS if version provided
+      say "[info] n8n not found in index; using OCI artifact"
+      if ! HELM_REGISTRY_CONFIG="$HELM_REGISTRY_CONFIG" helm upgrade --install n8n oci://registry-1.docker.io/bitnamicharts/n8n -n "$NAMESPACE_CORE" -f deploy/n8n/values.yaml 2> >(tee /tmp/helm_n8n.err >&2); then
+        if grep -q 'org.freedesktop.secrets' /tmp/helm_n8n.err; then
+          if [ -n "$N8N_CHART_VERSION" ]; then
+            say "[warn] OCI fetch hit secretservice for n8n. Falling back to direct HTTPS chart download (Bitnami) version $N8N_CHART_VERSION."
+            mkdir -p .cache/charts
+            CHART_URL="https://charts.bitnami.com/bitnami/n8n-${N8N_CHART_VERSION}.tgz"
+            if curl -fsSL "$CHART_URL" -o .cache/charts/n8n-${N8N_CHART_VERSION}.tgz; then
+              HELM_REGISTRY_CONFIG="$HELM_REGISTRY_CONFIG" helm upgrade --install n8n .cache/charts/n8n-${N8N_CHART_VERSION}.tgz -n "$NAMESPACE_CORE" -f deploy/n8n/values.yaml || true
+            else
+              say "[warn] n8n HTTPS fallback download failed: $CHART_URL"
+            fi
           else
-            say "[warn] n8n HTTPS fallback download failed: $CHART_URL"
+            say "[warn] n8n OCI failed due to secretservice and N8N_CHART_VERSION is not set; set N8N_CHART_VERSION (Bitnami chart version) to enable HTTPS fallback, or add 'community-charts' repo."
           fi
         else
-          say "[warn] n8n OCI failed due to secretservice and N8N_CHART_VERSION is not set; set N8N_CHART_VERSION to a valid chart version to enable HTTPS fallback."
+          say "[warn] n8n helm upgrade failed (non secretservice error); see /tmp/helm_n8n.err"
+          cat /tmp/helm_n8n.err || true
         fi
-      else
-        say "[warn] n8n helm upgrade failed (non secretservice error); see /tmp/helm_n8n.err"
-        cat /tmp/helm_n8n.err || true
       fi
     fi
   fi
@@ -84,4 +95,16 @@ else
   else
     say "[warn] ExternalSecrets CRD missing; skipped ExternalSecret docs"
   fi
+fi
+
+# Ingress for RabbitMQ Management and n8n UI via Traefik (chart-agnostic)
+if [ "$INSTALL_DRY_RUN" = "1" ]; then
+  say "[dry-run] kubectl apply -n $NAMESPACE_CORE -f deploy/rabbitmq/ingress.yaml (if present)"
+  say "[dry-run] kubectl apply -n $NAMESPACE_CORE -f deploy/n8n/ingress.yaml (if present)"
+else
+  [ -f deploy/traefik/n8n-auth-middleware.yaml ] && kubectl apply -f deploy/traefik/n8n-auth-middleware.yaml || true
+  [ -f deploy/rabbitmq/ingress.yaml ] && kubectl apply -n "$NAMESPACE_CORE" -f deploy/rabbitmq/ingress.yaml || true
+  [ -f deploy/rabbitmq/ingress-public.yaml ] && kubectl apply -n "$NAMESPACE_CORE" -f deploy/rabbitmq/ingress-public.yaml || true
+  [ -f deploy/n8n/ingress.yaml ] && kubectl apply -n "$NAMESPACE_CORE" -f deploy/n8n/ingress.yaml || true
+  [ -f deploy/n8n/ingress-public.yaml ] && kubectl apply -n "$NAMESPACE_CORE" -f deploy/n8n/ingress-public.yaml || true
 fi

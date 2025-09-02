@@ -14,7 +14,7 @@ set -euo pipefail
 #   METALLB_PURGE=1               -> Force delete metallb-system namespace before re-install (non-GitOps mode)
 #   METALLB_ADOPT=1               -> Annotate/label existing MetalLB resources for adoption
 
-SKIP_CILIUM=${SKIP_CILIUM:-false}
+SKIP_CILIUM=${SKIP_CILIUM:-true}
 INSTALL_DRY_RUN=${INSTALL_DRY_RUN:-0}
 METALLB_PURGE=${METALLB_PURGE:-0}
 METALLB_ADOPT=${METALLB_ADOPT:-0}
@@ -185,6 +185,55 @@ else
     say "[warning] No CNI detected; SKIP_CILIUM=true. If using Rancher Desktop this may be a detection gap (flannel)."
   else
     say "Skipping Cilium install (SKIP_CILIUM=true, detected CNI '$existing_cni')."
+  fi
+fi
+
+# --- cert-manager (for TLS) ---
+say "[cert-manager] Installing cert-manager (CRDs included)"
+run "helm upgrade --install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set installCRDs=true" || true
+
+# Bootstrap a local CA and a ClusterIssuer if not present
+if [ "$INSTALL_DRY_RUN" = "1" ]; then
+  say "[cert-manager] (dry-run) kubectl apply -f deploy/cert-manager/bootstrap-ca.yaml"
+  say "[cert-manager] (dry-run) kubectl apply -n $NAMESPACE_CORE -f deploy/cert-manager/wildcard-certificate.yaml"
+else
+  kubectl apply -f deploy/cert-manager/bootstrap-ca.yaml || true
+  kubectl apply -n "$NAMESPACE_CORE" -f deploy/cert-manager/wildcard-certificate.yaml || true
+fi
+
+# Optional: ACME via Cloudflare for public domain
+ACME_EMAIL=${ACME_EMAIL:-}
+TLS_PUBLIC_DOMAIN=${TLS_PUBLIC_DOMAIN:-}
+if [ -n "$TLS_PUBLIC_DOMAIN" ] && kubectl -n cert-manager get secret cloudflare-api-token-secret >/dev/null 2>&1; then
+  say "[cert-manager] Applying Cloudflare ACME issuers and wildcard cert for $TLS_PUBLIC_DOMAIN"
+  if [ "$INSTALL_DRY_RUN" = "1" ]; then
+    say "[cert-manager] (dry-run) kubectl apply -f deploy/cert-manager/issuer-cloudflare.yaml"
+    say "[cert-manager] (dry-run) kubectl apply -n $NAMESPACE_CORE -f deploy/cert-manager/wildcard-${TLS_PUBLIC_DOMAIN//./-}.yaml"
+  else
+    kubectl apply -f deploy/cert-manager/issuer-cloudflare.yaml || true
+    # If a domain-specific wildcard file exists, apply it; else generate on-the-fly
+    if [ -f "deploy/cert-manager/wildcard-${TLS_PUBLIC_DOMAIN//./-}.yaml" ]; then
+      kubectl apply -n "$NAMESPACE_CORE" -f "deploy/cert-manager/wildcard-${TLS_PUBLIC_DOMAIN//./-}.yaml" || true
+    else
+      cat <<EOF | kubectl apply -n "$NAMESPACE_CORE" -f -
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-${TLS_PUBLIC_DOMAIN//./-}
+spec:
+  secretName: wildcard-${TLS_PUBLIC_DOMAIN//./-}-tls
+  dnsNames:
+    - "*.${TLS_PUBLIC_DOMAIN}"
+    - "${TLS_PUBLIC_DOMAIN}"
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-cloudflare
+EOF
+    fi
+  fi
+else
+  if [ -n "$TLS_PUBLIC_DOMAIN" ]; then
+    say "[cert-manager] Skipping Cloudflare ACME: token secret missing (cert-manager/cloudflare-api-token-secret)"
   fi
 fi
 
@@ -417,4 +466,3 @@ if [ "$INSTALL_DRY_RUN" != "1" ]; then
 else
   say "(dry-run) Skipped cluster introspection."
 fi
-

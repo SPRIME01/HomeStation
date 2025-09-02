@@ -1,6 +1,5 @@
-# 0) network + (optional) skip cilium for now
+# 0) network + foundation (Traefik + MetalLB + cert-manager + Vault + ArgoCD)
 just configure-network
-export SKIP_CILIUM=true          # or: SKIP_CILIUM=true just install-foundation
 just install-foundation
 
 # 1) vault init/unseal/token (non-destructive, idempotent)
@@ -9,7 +8,64 @@ just vault-init
 # 2) SSO + Redis sessions + clients + Vault K8s onboarding
 just sso-bootstrap
 
-# 3) rest of the stack
+# 3) rest of the stack (via Ingress + TLS)
 just deploy-core
 just deploy-obs
 just deploy-ux
+
+# After install, trust the homelab CA on your workstation (optional, for no browser warnings):
+# kubectl -n cert-manager get secret homelab-ca -o jsonpath='{.data.ca\.crt}' | base64 -d > homelab-ca.crt
+# Then add to OS/browser trust store.
+
+
+
+
+
+
+
+-----
+Got it. Your intent is a homelab with Traefik as the cluster ingress, Vault/ESO for secrets, Ory for SSO, and RabbitMQ as the data fabric. Access should be via Ingress and DNS, not ad-hoc port-forwards. I aligned n8n and RabbitMQ to that model and removed the n8n chart mismatch.
+
+What I changed
+
+n8n install flow: Use the Community Helm Chart without passing your Bitnami values (schema mismatch). We manage Ingress ourselves.
+tools/scripts/deploy_core.sh: prefers community-charts/n8n without -f deploy/n8n/values.yaml and still falls back to Bitnami OCI/HTTPS if needed.
+Ingresses (Traefik):
+RabbitMQ UI at rabbitmq.homelab.lan → deploy/rabbitmq/ingress.yaml
+n8n UI at n8n.homelab.lan → deploy/n8n/ingress.yaml
+deploy_core.sh applies these after Helm installs.
+Why RabbitMQ links “refused to connect”
+
+Those URLs in Helm notes are only valid after you run a port-forward. Since you’re standardizing on cluster ingress, you don’t need them. Use Traefik + DNS instead.
+How to proceed (best practice)
+
+Verify Traefik service and IP:
+kubectl -n kube-system get svc traefik -o wide
+Ensure it’s LoadBalancer and has an external IP from your MetalLB pool.
+Add DNS for apps:
+Create A-records pointing to Traefik’s external IP:
+n8n.homelab.lan
+rabbitmq.homelab.lan
+Deploy core apps with Ingress:
+just deploy-core (or --dry-run first)
+Check status: kubectl -n core get deploy,svc,ingress
+Open UIs:
+n8n: http(s)://n8n.homelab.lan
+RabbitMQ: http(s)://rabbitmq.homelab.lan (same credentials as your values; or fetch with the kubectl commands from Helm notes)
+About n8n choices
+
+Previous error happened because deploy/n8n/values.yaml is tailored for Bitnami (uses env: and persistence: at root), but you were installing the Community chart which rejects those keys.
+Current approach avoids technical debt:
+Use the Community chart with defaults (sane for homelab), then a separate, chart-agnostic Ingress manifest.
+If/when you want to customize n8n (auth, persistence, image), I can add a deploy/n8n/community-values.yaml compatible with the Community chart and wire it cleanly.
+About RabbitMQ as data fabric
+
+You now have an Ingress to the management UI. AMQP stays cluster-internal (rabbitmq.core.svc.cluster.local:5672), which is appropriate.
+If you eventually want public AMQP/TLS or mTLS, we can front it with a LoadBalancer or TCP IngressRoute in Traefik, but it’s typically not exposed publicly in homelabs.
+Next steps
+
+Want me to:
+Add TLS via Traefik with your domain (let’s encrypt or local CA)?
+Add a Community n8n values file to enable basic auth/persistence?
+Add RabbitMQ Ingress annotations (auth, middlewares) or Kong exposure later?
+If anything 404s after DNS is set, share kubectl -n core get ingress,svc,pods and kubectl -n kube-system get svc traefik -o yaml and I’ll drill in.

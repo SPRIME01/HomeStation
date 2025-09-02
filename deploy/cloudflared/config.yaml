@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: infra
+data:
+  config.yaml: |
+    # Replace with your Named Tunnel ID
+    tunnel: fbee323e-5eda-4dda-b97c-8e56aca27cd8
+    credentials-file: /etc/cloudflared/credentials/credentials.json
+    ingress:
+      - hostname: n8n.primefam.cloud
+        service: http://traefik.kube-system.svc.cluster.local:80
+      - hostname: rabbitmq.primefam.cloud
+        service: http://traefik.kube-system.svc.cluster.local:80
+      - hostname: flagsmith.primefam.cloud
+        service: http://traefik.kube-system.svc.cluster.local:80
+      - service: http_status:404

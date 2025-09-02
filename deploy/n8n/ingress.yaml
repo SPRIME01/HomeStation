@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: n8n
+  annotations:
+    cert-manager.io/cluster-issuer: homelab-ca
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    traefik.ingress.kubernetes.io/router.middlewares: core-n8n-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  # Update host below if you changed DOMAIN (default homelab.lan)
+  rules:
+    - host: n8n.homelab.lan
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: n8n
+                port:
+                  number: 5678
+  tls:
+    - secretName: wildcard-homelab-lan-tls
+      hosts:
+        - n8n.homelab.lan

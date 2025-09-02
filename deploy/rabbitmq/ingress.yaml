@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rabbitmq
+  annotations:
+    cert-manager.io/cluster-issuer: homelab-ca
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  # Update host below if you changed DOMAIN (default homelab.lan)
+  rules:
+    - host: rabbitmq.homelab.lan
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rabbitmq
+                port:
+                  number: 15672
+  tls:
+    - secretName: wildcard-homelab-lan-tls
+      hosts:
+        - rabbitmq.homelab.lan

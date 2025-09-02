@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-homelab-lan
+spec:
+  secretName: wildcard-homelab-lan-tls
+  dnsNames:
+    - "*.homelab.lan"
+    - "homelab.lan"
+  issuerRef:
+    kind: ClusterIssuer
+    name: homelab-ca

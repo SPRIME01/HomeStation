@@ -26,8 +26,11 @@ lerna-debug.log*
 docker-compose.override.yml
 
 # Environment / secrets (keep example files in the repo, ignore actual secrets)
-.env
-.env.*
+/.env
+/.env.*
+tools/secrets/.envrc.vault
+tools/secrets/.env.vault
+tools/secrets/.envrc.cloudflare
 !.env.example
 secrets/
 *.pem
@@ -177,4 +180,3 @@ release/
 # .storage/
 # .cloud/
 # .HA_VERSION
-

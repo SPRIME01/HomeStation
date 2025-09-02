@@ -1,0 +1,29 @@
+image:
+  repository: n8nio/n8n
+  pullPolicy: IfNotPresent
+  tag: ""
+
+# Do not enable chart Ingress; we manage Ingress via deploy/n8n/ingress*.yaml
+ingress:
+  enabled: false
+
+# Main pod configuration (per chart schema)
+main:
+  # Persistent data under /home/node/.n8n
+  persistence:
+    enabled: true
+    size: 2Gi
+    mountPath: "/home/node/.n8n"
+    accessMode: ReadWriteOnce
+    storageClass: ""
+
+  # Environment variables for canonical URL and metrics
+  extraEnvVars:
+    N8N_HOST: n8n.primefam.cloud
+    N8N_PROTOCOL: https
+    N8N_METRICS: "true"
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 5678
