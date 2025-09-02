@@ -1,6 +1,9 @@
 mode: deployment
 image:
-  repository: otel/opentelemetry-collector-contrib
+  repository: ghcr.io/grafana/otel-loki
+  tag: latest
+command:
+  name: otelcol-contrib
 config:
   receivers:
     otlp:
