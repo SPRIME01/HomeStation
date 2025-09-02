@@ -1,0 +1,20 @@
+loki:
+  # Use local filesystem storage for a simple, single-node setup
+  storage:
+    type: filesystem
+  # Use a built-in test schema to avoid complex schema configuration
+  useTestSchema: true
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 5Gi
+
+# Disable Simple Scalable components when running singleBinary
+write:
+  replicas: 0
+read:
+  replicas: 0
+backend:
+  replicas: 0

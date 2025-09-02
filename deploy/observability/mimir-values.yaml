@@ -1,0 +1,18 @@
+global:
+  project: mimir
+
+ruler:
+  enabled: false
+
+ingester:
+  replicas: 1
+
+distributor:
+  replicas: 1
+
+querier:
+  replicas: 1
+
+store_gateway:
+  replicas: 1
+

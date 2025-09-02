@@ -1,0 +1,15 @@
+adminPassword: admin
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hosts:
+    - grafana.homelab.lan
+  tls:
+    - hosts:
+        - grafana.homelab.lan
+      secretName: grafana-tls
+
