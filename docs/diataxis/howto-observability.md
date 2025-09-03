@@ -39,3 +39,24 @@ Troubleshooting
   - Current chart uses `opentelemetry-collector-contrib`; logs exporter is not configured (use Promtail).
 - “Too many open files” with Promtail:
   - See `docs/diataxis/guide-promtail-ulimit.md`; raise node `LimitNOFILE`, then redeploy Promtail
+
+Secrets quickstart (Vault + ESO)
+- Ensure Vault is initialized/unsealed and you have a token:
+  - `just vault-init` and confirm writing `tools/secrets/.envrc.vault`, then `direnv allow .`.
+- Seed common app secrets (n8n, RabbitMQ, Flagsmith) into Vault KV:
+  - Interactive: `just vault-seed-kv`
+  - Only one: `just vault-seed-kv --only n8n` (or `rabbitmq`, `flagsmith`)
+  - Generate random values without prompts: `just vault-seed-kv --random`
+- Seed a new Nx-generated service APP_SECRET:
+  - `just vault-seed <service>` or `just vault-seed <service> --random`
+- Vault paths used by this repo:
+  - `kv/apps/n8n/app`: `N8N_BASIC_AUTH_PASSWORD`
+  - `kv/apps/rabbitmq/app`: `password`, `erlangCookie`
+  - `kv/apps/flagsmith/app`: `secret-key`
+  - `kv/apps/flagsmith/database`: `url` (set if using external DB)
+ESO syncs these into Kubernetes; manifests already reference those Secrets.
+
+How to use:
+1. just vault-init and allow .envrc to load tools/secrets/.envrc.vault.
+2. Run just vault-seed-kv (or --random) to populate secrets.
+3. Deploy as usual: just deploy-core, just deploy-obs, etc. ESO will sync secrets to K8s automatically.

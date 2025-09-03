@@ -1,0 +1,12 @@
+architecture: standalone
+master:
+  disabledCommands: ["FLUSHDB", "FLUSHALL"]
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

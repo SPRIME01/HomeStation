@@ -35,6 +35,7 @@ Reference
 - Endpoints and URLs → docs/diataxis/reference-endpoints.md
 - Justfile recipes → docs/diataxis/reference-just-recipes.md
 - Environment variables → docs/diataxis/reference-env-vars.md
+- direnv for env/secrets → docs/diataxis/guide-direnv.md
 
 Explanations
 - Architecture overview → docs/diataxis/explanation-architecture.md

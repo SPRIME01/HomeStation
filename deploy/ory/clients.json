@@ -1,0 +1,65 @@
+{
+    "clients": [
+        {
+            "client_id": "grafana",
+            "client_name": "Grafana",
+            "grant_types": [
+                "authorization_code",
+                "refresh_token"
+            ],
+            "response_types": [
+                "code",
+                "id_token"
+            ],
+            "scope": "openid profile email offline_access",
+            "redirect_uris": [
+                "https://grafana.homelab.lan/login/generic_oauth"
+            ]
+        },
+        {
+            "client_id": "argocd",
+            "client_name": "ArgoCD",
+            "grant_types": [
+                "authorization_code",
+                "refresh_token"
+            ],
+            "response_types": [
+                "code"
+            ],
+            "scope": "openid profile email groups offline_access",
+            "redirect_uris": [
+                "https://argocd.homelab.lan/auth/callback"
+            ]
+        },
+        {
+            "client_id": "vault",
+            "client_name": "Vault OIDC",
+            "grant_types": [
+                "authorization_code",
+                "refresh_token"
+            ],
+            "response_types": [
+                "code"
+            ],
+            "scope": "openid profile email offline_access",
+            "redirect_uris": [
+                "https://vault.homelab.lan/ui/vault/auth/oidc/oidc/callback"
+            ]
+        },
+        {
+            "client_id": "oauth2-proxy",
+            "client_name": "oauth2-proxy",
+            "grant_types": [
+                "authorization_code",
+                "refresh_token"
+            ],
+            "response_types": [
+                "code"
+            ],
+            "scope": "openid profile email offline_access",
+            "redirect_uris": [
+                "https://sso.homelab.lan/oauth2/callback"
+            ]
+        }
+    ]
+}

@@ -82,6 +82,27 @@ configure-network +args='*':
 		python3 tools/scripts/configure_network.py; \
 	fi
 
+# Seed common Vault KV entries with random or prompted values
+# Usage:
+#   just vault-seed-kv           # interactive prompts (safe defaults)
+#   just vault-seed-kv --random  # generate strong random values (skips DB URL)
+#   just vault-seed-kv --dry-run # preview writes
+vault-seed-kv +args='*':
+	DRY=0; for a in {{args}}; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; \
+	if [ "$DRY" = "1" ]; then \
+		echo "[dry-run] bash tools/scripts/vault_seed_kv.sh {{args}}"; \
+	else \
+		bash tools/scripts/vault_seed_kv.sh {{args}}; \
+	fi
+
+# Seed APP_SECRET for a new/existing service (Nx generator expects kv/apps/<name>/APP_SECRET)
+# Usage:
+#   just vault-seed my-service           # prompt or autogen
+#   just vault-seed my-service --random  # autogenerate strong secret
+vault-seed name +args='*':
+	if [ -z "{{name}}" ]; then echo "[error] Usage: just vault-seed <service-name> [--random]"; exit 1; fi; \
+	bash tools/scripts/vault_seed_kv.sh --seed-app-secret "{{name}}" {{args}}
+
 vault-init +args='*':
 	# One-click Vault init/unseal and VAULT_TOKEN helper
 	DRY=0; for a in {{args}}; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; \
@@ -91,12 +112,52 @@ sso-bootstrap +args='*':
 	# Install Ory stack, oauth2-proxy(+Redis), onboard Vault K8s auth, and register Hydra clients
 	DRY=0; for a in {{args}}; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; \
 	just --set INSTALL_DRY_RUN "$DRY" helm-repos; \
+	# Ensure namespaces
+	kubectl get ns "$NAMESPACE_SSO" >/dev/null 2>&1 || kubectl create ns "$NAMESPACE_SSO" >/dev/null; \
+	# Install Ory components and oauth2-proxy (and optional Redis) \
 	if [ "$DRY" = "1" ]; then \
-		echo "[dry-run] bash tools/scripts/vault_k8s_onboard.sh"; \
-		echo "[dry-run] python3 tools/scripts/hydra_clients.py"; \
+		echo "[dry-run] helm upgrade --install kratos ory/kratos -n \"$NAMESPACE_SSO\" -f deploy/ory/kratos-values.yaml"; \
+		echo "[dry-run] helm upgrade --install hydra ory/hydra -n \"$NAMESPACE_SSO\" -f deploy/ory/hydra-values.yaml"; \
+		if [ "${OAUTH2_PROXY_REDIS_ENABLED}" = "true" ]; then \
+		  echo "[dry-run] helm upgrade --install redis bitnami/redis -n \"$NAMESPACE_SSO\" -f deploy/redis/values.yaml"; \
+		else \
+		  echo "[dry-run] [skipped] redis disabled (set OAUTH2_PROXY_REDIS_ENABLED=true to enable)"; \
+		fi; \
+		echo "[dry-run] helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy -n \"$NAMESPACE_SSO\" -f deploy/oauth2-proxy/values.yaml"; \
+		# Simulate port-forwards and registrations \
+		echo "[dry-run] (pf) kubectl -n \"$NAMESPACE_SSO\" port-forward svc/hydra-admin 4445:4445"; \
+		echo "[dry-run] (pf) kubectl -n \"$NAMESPACE_INFRA\" port-forward svc/vault 8200:8200"; \
+		echo "[dry-run] python3 tools/scripts/hydra_clients.py --admin \"http://127.0.0.1:4445\" --domain \"$DOMAIN\" --config deploy/ory/clients.json"; \
+		if [ -n "${VAULT_TOKEN:-}" ]; then \
+		  echo "[dry-run] VAULT_ADDR=http://127.0.0.1:8200 bash tools/scripts/vault_k8s_onboard.sh"; \
+		else \
+		  echo "[dry-run] [skip] VAULT_TOKEN not set; skipping Vault onboarding. Hint: source tools/secrets/.envrc.vault or run 'just vault-init', then re-run 'just sso-bootstrap'."; \
+		fi; \
 	else \
-		bash tools/scripts/vault_k8s_onboard.sh || true; \
-		python3 tools/scripts/hydra_clients.py || true; \
+		helm upgrade --install kratos ory/kratos -n "$NAMESPACE_SSO" -f deploy/ory/kratos-values.yaml || true; \
+		helm upgrade --install hydra ory/hydra -n "$NAMESPACE_SSO" -f deploy/ory/hydra-values.yaml || true; \
+		if [ "${OAUTH2_PROXY_REDIS_ENABLED}" = "true" ]; then \
+		  helm upgrade --install redis bitnami/redis -n "$NAMESPACE_SSO" -f deploy/redis/values.yaml || true; \
+		fi; \
+		helm upgrade --install oauth2-proxy oauth2-proxy/oauth2-proxy -n "$NAMESPACE_SSO" -f deploy/oauth2-proxy/values.yaml || true; \
+		# Start short-lived port-forwards to Hydra admin and Vault \
+		PF_HYDRA=""; PF_VAULT=""; trap '[[ -n "$PF_HYDRA" ]] && kill $PF_HYDRA 2>/dev/null || true; [[ -n "$PF_VAULT" ]] && kill $PF_VAULT 2>/dev/null || true' EXIT; \
+		(kubectl -n "$NAMESPACE_SSO" port-forward svc/hydra-admin 4445:4445 >/tmp/pf_hydra.log 2>&1 & echo $! > /tmp/pf_hydra.pid) || true; sleep 2; PF_HYDRA=$(cat /tmp/pf_hydra.pid 2>/dev/null || true); \
+		(kubectl -n "$NAMESPACE_INFRA" port-forward svc/vault 8200:8200 >/tmp/pf_vault.log 2>&1 & echo $! > /tmp/pf_vault.pid) || true; sleep 2; PF_VAULT=$(cat /tmp/pf_vault.pid 2>/dev/null || true); \
+		# Wait briefly for Hydra admin to be responsive \
+		HYDRA_ADMIN_URL_LOCAL="http://127.0.0.1:4445"; \
+		for i in $(seq 1 20); do \
+		  curl -fsS "$HYDRA_ADMIN_URL_LOCAL/health/alive" >/dev/null 2>&1 && break; sleep 1; \
+		  [ "$i" = 20 ] && echo "[warn] hydra admin not responding yet; proceeding"; \
+		done; \
+		# Vault onboarding only if VAULT_TOKEN available \
+		if [ -n "${VAULT_TOKEN:-}" ]; then \
+		  VAULT_ADDR=http://127.0.0.1:8200 bash tools/scripts/vault_k8s_onboard.sh || true; \
+		else \
+		  echo "VAULT_TOKEN not set; skipping Vault onboarding. Source tools/secrets/.envrc.vault or run 'just vault-init', then re-run 'just sso-bootstrap'."; \
+		fi; \
+		# Register Hydra OAuth2 clients \
+		python3 tools/scripts/hydra_clients.py --admin "$HYDRA_ADMIN_URL_LOCAL" --domain "$DOMAIN" --config deploy/ory/clients.json || true; \
 	fi
 
 

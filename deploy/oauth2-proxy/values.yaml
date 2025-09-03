@@ -1,0 +1,19 @@
+config:
+  # If you create a Secret with client_id/client_secret, set existingSecret here
+  existingSecret: ""
+extraArgs:
+  provider: "oidc"
+  oidc-issuer-url: "https://auth.homelab.lan"
+  cookie-secure: "true"
+  cookie-samesite: "lax"
+  email-domain: "*"
+  whitelist-domain: ".homelab.lan"
+  pass-authorization-header: "true"
+  pass-access-token: "true"
+  set-xauthrequest: "true"
+  ssl-insecure-skip-verify: "true"
+  upstream: "static://200"
+  redirect-url: "https://sso.homelab.lan/oauth2/callback"
+  cookie-refresh: "1h"
+service:
+  type: ClusterIP

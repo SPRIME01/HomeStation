@@ -151,6 +151,18 @@ if [[ "$HAS_TOKEN" -ne 1 ]]; then
       write_env_file "$TOK"
     fi
   fi
+else
+  # A valid token is present (via env or ~/.vault-token). Offer to write session file for convenience.
+  CUR_TOK="${VAULT_TOKEN:-}"
+  if [[ -z "$CUR_TOK" ]] && [[ -f "${HOME}/.vault-token" ]]; then
+    CUR_TOK=$(cat "${HOME}/.vault-token" 2>/dev/null || true)
+  fi
+  if [[ -n "$CUR_TOK" ]]; then
+    read -r -p "Write current Vault token to $ENV_FILE for direnv/source? [y/N] " ans || true
+    if [[ "${ans:-}" =~ ^[Yy]$ ]]; then
+      write_env_file "$CUR_TOK"
+    fi
+  fi
 fi
 
 echo "Vault is ready. You can now run: 'just sso-bootstrap'."

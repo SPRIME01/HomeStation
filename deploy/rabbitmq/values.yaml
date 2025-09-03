@@ -1,7 +1,8 @@
 auth:
   username: user
-  password: CHANGEME
-  erlangCookie: CHANGEMECOOKIE
+  # Use existing Secret created by External Secrets (deploy/rabbitmq/externalsecret.yaml)
+  existingPasswordSecret: rabbitmq-auth
+  existingErlangSecret: rabbitmq-auth
 
 service:
   type: ClusterIP

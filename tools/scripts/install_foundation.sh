@@ -116,6 +116,12 @@ if [ "$GITOPS_BOOTSTRAP" != "1" ]; then
     say "[eso] External Secrets CRDs present – ensuring Helm release installed"
   fi
   run "helm upgrade --install external-secrets external-secrets/external-secrets -n $NAMESPACE_INFRA --create-namespace --set installCRDs=true" || true
+  # Apply Vault ClusterSecretStore if present so ESO can read from Vault
+  if [ -f deploy/eso/vault-clustersecretstore.yaml ]; then
+    run "kubectl apply -f deploy/eso/vault-clustersecretstore.yaml"
+  else
+    say "[eso] Hint: create deploy/eso/vault-clustersecretstore.yaml to wire ESO to Vault (see docs/runbook.md)"
+  fi
 else
   say "[eso] Skipping External Secrets (GitOps bootstrap mode)"
 fi
@@ -365,7 +371,11 @@ if [ "$GITOPS_BOOTSTRAP" != "1" ]; then
     vault "$NAMESPACE_INFRA" 'vault' \
     'clusterrole,clusterrolebinding,validatingwebhookconfigurations.admissionregistration.k8s.io,mutatingwebhookconfigurations.admissionregistration.k8s.io' \
     'sa,role,rolebinding,cm,secret,svc,deploy,statefulset,daemonset,ingress,job,cronjob,pdb,networkpolicy,horizontalpodautoscaler.autoscaling'
-  run "helm upgrade --install vault hashicorp/vault -n $NAMESPACE_INFRA" || true
+  if [ -f deploy/vault/values.yaml ]; then
+    run "helm upgrade --install vault hashicorp/vault -n $NAMESPACE_INFRA -f deploy/vault/values.yaml" || true
+  else
+    run "helm upgrade --install vault hashicorp/vault -n $NAMESPACE_INFRA" || true
+  fi
 else
   say "[vault] Skipping direct install (GitOps bootstrap mode)"
 fi

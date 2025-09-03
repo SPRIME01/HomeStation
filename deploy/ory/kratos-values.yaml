@@ -1,0 +1,16 @@
+kratos:
+  config:
+    dsn: memory
+    serve:
+      public:
+        base_url: http://kratos-public.svc.cluster.local:4433
+      admin:
+        base_url: http://kratos-admin.svc.cluster.local:4434
+    log:
+      level: info
+    identity:
+      default_browser_return_url: https://home.homelab.lan
+    selfservice:
+      default_browser_return_url: https://home.homelab.lan
+  service:
+    type: ClusterIP

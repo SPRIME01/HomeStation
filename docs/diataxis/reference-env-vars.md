@@ -8,3 +8,13 @@
 - `CF_API_TOKEN`: Cloudflare API token with Zone.DNS:Edit for `TLS_PUBLIC_DOMAIN`. You can store it in `tools/secrets/.envrc.cloudflare` and run `direnv allow .`.
 - `HELM_NO_CREDS` (0|1): bypass host keychain (OCI pulls). Used during Bitnami fallbacks.
 - `ADOPT_EXISTING` (0|1): annotate/label existing resources for Helm adoption (advanced).
+
+Precedence and examples (.env vs .env.local)
+- `.envrc` loads `.env` first, then `.env.local` (if present). Variables in `.env.local` override `.env`.
+- `.env` and `.env.local` are gitignored in this repo. Commit examples in `.env.example` only.
+- Example `.env.example` (copy to `.env` locally):
+  - `DOMAIN=homelab.lan`
+  - `PROMTAIL_ENABLED=0`
+- Example `.env.local` (overrides for your machine):
+  - `DOMAIN=primefam.cloud`
+  - `PROMTAIL_ENABLED=1`

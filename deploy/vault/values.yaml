@@ -1,0 +1,17 @@
+server:
+  dataStorage:
+    enabled: true
+    size: 5Gi
+  auditStorage:
+    enabled: true
+  ha:
+    enabled: false
+  ingress:
+    enabled: false
+  extraEnvironmentVars:
+    VAULT_LOCAL_CONFIG: |
+      ui = true
+      listener "tcp" { address = "0.0.0.0:8200" tls_disable = 1 }
+      storage "raft" { path = "/vault/data" }
+      disable_mlock = true
+

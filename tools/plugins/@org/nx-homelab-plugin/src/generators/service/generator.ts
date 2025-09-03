@@ -90,4 +90,8 @@ spec:
     fs.writeFileSync(fp, content);
   }
   console.log(`Generated service '${name}' in ${base}`);
+  console.log(`Next steps:`);
+  console.log(`  1) Seed Vault secret for this service: just vault-seed ${name} --random`);
+  console.log(`     (ExternalSecret expects: kv/apps/${name}/APP_SECRET with key APP_SECRET)`);
+  console.log(`  2) Apply k8s manifests (Deployment/Service/Ingress/ExternalSecret) when ready.`);
 }

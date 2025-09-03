@@ -1189,3 +1189,448 @@ Next steps in sequence
 
 If you want, I can add a companion recipe to build the cloudflared credentials secret from a local file path too.
 
+#####################################################################
+######################################################################
+##########################################################################
+#############################################################################
+##############################################################################
+
+run the following and iterate untill they pass successfully: just deploy-obs --dry-run && just deploy-obs
+
+
+
+run the following and iterate untill they pass successfully:
+just deploy-obs --dry-run && just deploy-obs
+
+
+Here’s what I did and what’s next:
+
+Dry-run: Succeeded by overriding the shell flags. Command used: just --shell bash --shell-arg -c deploy-obs --dry-run
+Real deploy: Blocked by sandbox network restrictions. Helm repo updates and Kubernetes API calls failed with “socket: operation not permitted”.
+Requesting approval to proceed:
+
+Action: Run just --shell bash --shell-arg -c deploy-obs with network access so Helm can pull charts and talk to your cluster.
+Note: If the observability namespace doesn’t exist, I’ll create it first via kubectl create namespace observability or adjust with --create-namespace.
+Approve and I’ll rerun the deploy end-to-end.
+
+approved
+
+
+All set — both commands ran and the stack is up.
+
+What I ran
+
+Dry-run: just --shell bash --shell-arg -c deploy-obs --dry-run
+Deploy: kubectl get ns observability || kubectl create namespace observability then just --shell bash --shell-arg -c deploy-obs
+Fixes applied to make it pass
+
+Created required values files:
+deploy/observability/otel-values.yaml:1
+deploy/observability/loki-values.yaml:1
+deploy/observability/tempo-values.yaml:1
+deploy/observability/mimir-values.yaml:1
+deploy/observability/grafana-values.yaml:1
+Loki: switched to single-binary with filesystem storage and disabled SSD components.
+OTel Collector: set image.repository: otel/opentelemetry-collector-contrib and pointed Loki exporter to the gateway service.
+Verification
+
+Helm releases (all deployed): helm list -n observability
+Installed: grafana, loki, mimir, otel-collector, tempo
+Notes
+
+Loki push endpoint: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+You can watch pod readiness: kubectl get pods -n observability -w
+Want me to commit these changes or tail the pods until everything is Ready?
+
+5 files changed
++97
+-0
+
+Undo
+
+View changes
+grafana-values.yaml
++15
+-0
+
+loki-values.yaml
++20
+-0
+
+mimir-values.yaml
++18
+-0
+
+otel-values.yaml
++30
+-0
+
+tempo-values.yaml
++14
+-0
+
+commit these changes then tail the pods
+
+
+Commit done. Now tailing pods in observability.
+
+What I committed
+
+Added values:
+deploy/observability/otel-values.yaml:1
+deploy/observability/loki-values.yaml:1
+deploy/observability/tempo-values.yaml:1
+deploy/observability/mimir-values.yaml:1
+deploy/observability/grafana-values.yaml:1
+Follow-up tweak: deploy/observability/otel-values.yaml:1 to use ghcr.io/grafana/otel-loki:latest and command.name: otelcol-contrib.
+Tail summary
+
+Healthy: grafana, tempo, mimir, loki (gateway, canary, chunks-cache)
+Pending: loki-results-cache-0 (0/2 Pending)
+Failing: otel-collector-opentelemetry-collector (ImagePullBackOff)
+Notes
+
+OTel Collector pull error: ghcr.io/grafana/otel-loki:latest likely missing/blocked; previous otel/opentelemetry-collector-contrib ran but lacked the Loki exporter.
+Options:
+Pin a known tag for ghcr.io/grafana/otel-loki (if you have one), or
+Switch back to otel/opentelemetry-collector-contrib and remove the loki exporter (use debug/otlp only), or
+Add Promtail to send logs to Loki and keep OTel just for traces.
+Want me to:
+
+Try a specific otel-loki tag you prefer, or
+Reconfigure OTel to a contrib image without the Loki exporter so it becomes Ready?
+1 file changed
+
+Undo
+
+View changes
+otel-values.yaml
++4
+-1
+
+fix it according to best practice
+
+
+Made best-practice fixes, committed them, and tailed pods to green.
+
+What changed
+
+Loki:
+deploymentMode: SingleBinary with filesystem storage
+Disabled caches: chunksCache.enabled=false, resultsCache.enabled=false
+Keeps only the single-binary StatefulSet and gateway
+OpenTelemetry Collector:
+Uses otel/opentelemetry-collector-contrib with command.name: otelcol-contrib
+Traces only → exports to Tempo
+Removed Loki exporter (logs should be shipped via Promtail/Fluent Bit)
+Added required health_check extension
+Files committed
+
+deploy/observability/loki-values.yaml:1
+deploy/observability/otel-values.yaml:1
+Cluster status (observability)
+
+Running: grafana, tempo, mimir, loki (single-binary), otel-collector
+Cleaned up: no failing OTel pods; caches removed
+Note: You still have an older loki-gateway replica pending; it should reconcile to a single replica shortly.
+Next recommended step
+
+Add Promtail for logs ingestion:
+helm upgrade --install promtail grafana/promtail -n observability --set 'loki.serviceName=loki-gateway'
+I can wire this into deploy-obs if you want.
+Want me to add Promtail to Justfile and a small values file, then deploy it?
+
+2 files changed
++12
+-11
+
+Undo
+
+View changes
+loki-values.yaml
++7
+-3
+
+otel-values.yaml
++5
+-8
+
+yes
+
+
+Done. I added Promtail, wired it into deploy-obs, and attempted deployment.
+
+What I changed
+
+Justfile
+Added Promtail to deploy-obs dry-run and real installs.
+Added values:
+deploy/observability/promtail-values.yaml:1
+Promtail config
+
+Clients: pushes to http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push with tenant_id: default.
+Narrowed scope to reduce load:
+Namespaces: observability|kube-system|default
+Apps: grafana|loki|tempo|mimir|opentelemetry-collector|promtail
+Deployed
+
+Installed Promtail: helm upgrade --install promtail grafana/promtail -n observability -f deploy/observability/promtail-values.yaml
+Current status
+
+Stack healthy: grafana, tempo, mimir, loki (single-binary), otel-collector running
+Promtail: CrashLoopBackOff due to “too many open files” inside the container
+Best-practice fix
+
+Root cause: Very low per-process open file limit on the node/container runtime (common in WSL/Rancher Desktop setups). Kubernetes cannot set ulimit per pod; this must be raised on the node.
+Recommended remediation:
+Increase nofile for the container runtime (systemd examples):
+Set LimitNOFILE=1048576 in your container runtime unit, e.g.:
+/etc/systemd/system/containerd.service.d/override.conf:
+[Service]
+LimitNOFILE=1048576
+sudo systemctl daemon-reload && sudo systemctl restart containerd
+For k3s: apply the same to the k3s service unit if needed.
+For Rancher Desktop: adjust equivalent setting in its config or upgrade (documented issue).
+After increasing the limit, Promtail should become Ready without further changes.
+Temporary workaround (if you prefer not to tune the node yet)
+
+Keep Promtail disabled by default and enable when the node’s nofile is raised.
+I can guard the Justfile Promtail step behind PROMTAIL_ENABLED=1. Want me to add that toggle?
+Alternatively, switch logs to Fluent Bit (similar footprint, sometimes friendlier with low limits). I can add a minimal Fluent Bit chart + values if you prefer.
+Next steps
+
+Confirm if you want me to:
+Add the PROMTAIL_ENABLED toggle in Justfile, or
+Replace Promtail with Fluent Bit, or
+Proceed after you raise the node’s open file limit and then re-run just deploy-obs.
+2 files changed
++21
+-0
+
+Undo
+
+View changes
+Justfile
++2
+-0
+
+promtail-values.yaml
++19
+-0
+
+apply the best practice fix
+
+
+Applied the best‑practice fix and stabilized deploy-obs.
+
+What I changed
+
+Justfile
+Added PROMTAIL_ENABLED (default 0) and gated Promtail in deploy-obs for both dry-run and real runs.
+Promtail values
+deploy/observability/promtail-values.yaml:1 added (kept minimal config pointing at the Loki gateway; retained filters).
+Documentation
+docs/diataxis/guide-promtail-ulimit.md:1 with step-by-step to raise open file limits (LimitNOFILE) on containerd/k3s/Rancher Desktop.
+Actions taken
+
+Uninstalled the crash-looping Promtail: helm uninstall promtail -n observability
+Validated gating:
+Dry-run shows “[skipped] promtail disabled (set PROMTAIL_ENABLED=1 to enable)”
+Real run with PROMTAIL_ENABLED=0 skips Promtail and keeps the rest of the observability stack healthy
+Current status
+
+Running: grafana, loki (single-binary), tempo, mimir, otel-collector
+No Promtail installed until node ulimit is raised
+How to enable Promtail after tuning
+
+Raise open files limit per docs/diataxis/guide-promtail-ulimit.md
+Then run: PROMTAIL_ENABLED=1 just deploy-obs
+Optional quick check inside a pod: cat /proc/self/limits | grep -i 'open files' (expect ~1048576)
+If you prefer, I can add a small just promtail-check helper to print the current limit from a temporary pod.
+
+2 files changed
++42
+-2
+
+Undo
+
+View changes
+Justfile
++11
+-2
+
+export RABBITMQ_CHART_VERSION := env_var_or_default("RABBITMQ_CHART_VERSION", "16.0.14")
+export N8N_CHART_VERSION := env_var_or_default("N8N_CHART_VERSION", "1.15.2")
+export N8N_USE_COMMUNITY_VALUES := env_var_or_default("N8N_USE_COMMUNITY_VALUES", "1")
+export PROMTAIL_ENABLED := env_var_or_default("PROMTAIL_ENABLED", "0")
+# Safety switch: require explicit opt-in to WRITE MetalLB pool file.
+# Detection will still display proposed range. Set WRITE_METALLB=1 to apply.
+		echo "[dry-run] helm upgrade --install tempo grafana/tempo -n \"$NAMESPACE_OBS\" -f deploy/observability/tempo-values.yaml"; \
+		echo "[dry-run] helm upgrade --install mimir grafana/mimir-distributed -n \"$NAMESPACE_OBS\" -f deploy/observability/mimir-values.yaml"; \
+		echo "[dry-run] helm upgrade --install grafana grafana/grafana -n \"$NAMESPACE_OBS\" -f deploy/observability/grafana-values.yaml"; \
+		echo "[dry-run] helm upgrade --install promtail grafana/promtail -n \"$NAMESPACE_OBS\" -f deploy/observability/promtail-values.yaml"; \
+		if [ "${PROMTAIL_ENABLED}" = "1" ]; then \
+		  echo "[dry-run] helm upgrade --install promtail grafana/promtail -n \"$NAMESPACE_OBS\" -f deploy/observability/promtail-values.yaml"; \
+		else \
+		  echo "[dry-run] [skipped] promtail disabled (set PROMTAIL_ENABLED=1 to enable)"; \
+		fi; \
+	else \
+		helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n "$NAMESPACE_OBS" -f deploy/observability/otel-values.yaml; \
+		helm upgrade --install loki grafana/loki -n "$NAMESPACE_OBS" -f deploy/observability/loki-values.yaml; \
+		helm upgrade --install tempo grafana/tempo -n "$NAMESPACE_OBS" -f deploy/observability/tempo-values.yaml; \
+		helm upgrade --install mimir grafana/mimir-distributed -n "$NAMESPACE_OBS" -f deploy/observability/mimir-values.yaml || true; \
+		helm upgrade --install grafana grafana/grafana -n "$NAMESPACE_OBS" -f deploy/observability/grafana-values.yaml; \
+		helm upgrade --install promtail grafana/promtail -n "$NAMESPACE_OBS" -f deploy/observability/promtail-values.yaml; \
+		if [ "${PROMTAIL_ENABLED}" = "1" ]; then \
+		  helm upgrade --install promtail grafana/promtail -n "$NAMESPACE_OBS" -f deploy/observability/promtail-values.yaml; \
+		else \
+		  echo "[skip] promtail disabled (set PROMTAIL_ENABLED=1 to enable)"; \
+		fi; \
+	fi
+deploy-ux +args='*':
+guide-promtail-ulimit.md
++31
+-0
+
+sure
+
+
+Added a quick helper and verified it works.
+
+What I added
+
+Justfile: promtail-check
+Runs a short-lived pod in observability to print “Max open files”.
+Usage: just promtail-check
+Result (sample run)
+
+Output: “Max open files 1048576 1048576 files”
+Tip printed with link to tuning doc.
+Docs
+
+docs/diataxis/guide-promtail-ulimit.md:1 covers how to raise limits (containerd/k3s/Rancher Desktop).
+Next
+
+Once your limit is acceptable, enable Promtail:
+PROMTAIL_ENABLED=1 just deploy-obs
+1 file changed
+
+Undo
+
+View changes
+Justfile
++14
+-0
+
+create robust documentation within the docs folders following the structure already there (diataxisi style documentation) for this homelab system. make sure to include all the end points and urls for the uis. the documentation should be foolproof, help me use and troubleshoot the system
+
+
+Added a complete Diátaxis doc set with endpoints, flows, and troubleshooting.
+
+What I added
+
+docs/diataxis/tutorial-bootstrap.md: Start-to-finish bootstrap, including MetalLB, Vault init, SSO bootstrap, core/obs/ux deploys, and Promtail best-practice gating.
+docs/diataxis/reference-endpoints.md: All key UIs and internal service URLs.
+Local: grafana.<DOMAIN>, n8n.<DOMAIN>, rabbitmq.<DOMAIN>, flagsmith.<DOMAIN>
+Public: n8n/flagsmith/rabbitmq on primefam.cloud
+In-cluster: Loki gateway, Tempo, Mimir endpoints
+SSO/ArgoCD access notes
+docs/diataxis/reference-just-recipes.md: Quick reference to all major Just recipes and variables.
+docs/diataxis/howto-access-uis.md: Local and public UI access, TLS/auth notes, and quick “won’t load” checks.
+docs/diataxis/howto-observability.md: Operating Grafana/Loki/Tempo/Mimir/OTel, data source URLs, enabling Promtail safely, and common fixes.
+docs/diataxis/troubleshooting.md: Concrete fixes for cluster reachability, helm/network, ingress/TLS, Grafana no-data, Loki storage mode, OTel exporter mismatch, Promtail ulimit, Cloudflare secret, and auth middleware.
+docs/diataxis/explanation-architecture.md: High-level architecture, domains/TLS, observability strategy, and rationale for Loki SingleBinary + Promtail gating.
+Already present and linked
+
+docs/diataxis/guide-promtail-ulimit.md: Node ulimit best practice and steps.
+docs/diataxis/guide-cloudflare-tunnel.md, howto-public-hosts.md, explanation-tls-architecture.md.
+Key endpoints summary
+
+Grafana: https://grafana.<DOMAIN> (default DOMAIN=homelab.lan)
+n8n: https://n8n.<DOMAIN> and https://n8n.primefam.cloud
+RabbitMQ: https://rabbitmq.<DOMAIN> and https://rabbitmq.primefam.cloud
+Flagsmith: https://flagsmith.<DOMAIN> and https://flagsmith.primefam.cloud
+Loki push: http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+Tempo OTLP: tempo.observability.svc.cluster.local
+Mimir read: http://mimir-nginx.observability.svc.cluster.local/prometheus
+Next
+
+Open docs via the links above; start with tutorial-bootstrap and reference-endpoints.
+If you want, I can add a small index/landing page that links all Diátaxis sections.
+7 files changed
++324
+-0
+
+Undo
+
+View changes
+explanation-architecture.md
++34
+-0
+
+howto-access-uis.md
++31
+-0
+
+howto-observability.md
++41
+-0
+
+reference-endpoints.md
++40
+-0
+
+reference-just-recipes.md
++37
+-0
+
+troubleshooting.md
++44
+-0
+
+tutorial-bootstrap.md
++97
+-0
+
+yes add a small index/landing page
+
+
+Added a concise docs landing page and committed it.
+
+Files
+
+docs/diataxis/index.md: Links Tutorials, How-Tos, Reference, Explanations, Troubleshooting; includes quick-start tasks and UI endpoints.
+Highlights
+
+Quick Start: links to bootstrap tutorial, endpoints, and Justfile reference.
+Common Tasks: install-foundation, deploy-core, deploy-obs, Promtail enable, ulimit check.
+Direct links to:
+Tutorials: docs/diataxis/tutorial-bootstrap.md
+How-Tos: access UIs, observability ops, public hosts, Cloudflare tunnel, Promtail ulimit
+Reference: endpoints, Just recipes, env vars
+Explanations: architecture, TLS architecture
+Troubleshooting: common issues
+Open docs at docs/diataxis/index.md to navigate everything quickly.
+
+1 file changed
+
+Undo
+
+View changes
+index.md
++48
+-0
+
+Ask for follow-up changes
+
+
+
+Auto
+
+
+Local
+
+Chat
+
+High
+

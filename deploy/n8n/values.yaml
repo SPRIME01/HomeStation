@@ -22,11 +22,14 @@ env:
     value: "true"
   - name: N8N_BASIC_AUTH_USER
     value: "admin"
-  - name: N8N_BASIC_AUTH_PASSWORD
-    value: "CHANGEME"
   - name: GENERIC_TIMEZONE
     value: "UTC"
   - name: EXECUTIONS_PROCESS
     value: "own"
   - name: N8N_METRICS
     value: "true"
+
+# Load sensitive env vars (like N8N_BASIC_AUTH_PASSWORD) from a Secret
+# created by External Secrets (see deploy/n8n/externalsecret.yaml).
+# Most Bitnami charts support extraEnvVarsSecret to envFrom that Secret.
+extraEnvVarsSecret: n8n-env

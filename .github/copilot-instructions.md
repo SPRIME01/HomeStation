@@ -71,11 +71,11 @@ just vault-init
 
   * Initialize (1 key share), display **Unseal Key** & **Initial Root Token** (stdout only),
   * **Unseal once**, set `VAULT_TOKEN` for the current process,
-  * Optionally write `tools/secrets/.env.vault` (mode 600) if you confirm.
+  * Optionally write `tools/secrets/.envrc.vault` (mode 600) if you confirm.
 * If already initialized but sealed, prompts for **Unseal Key**.
 * If unsealed and no token exported, prompts for a token.
 
-> After this step, you should have `VAULT_TOKEN` available in the current shell. If not: `source tools/secrets/.env.vault` (if created) or export a valid token.
+> After this step, you should have `VAULT_TOKEN` available in the current shell. If not: `source tools/secrets/.envrc.vault` (if created) or export a valid token. `.envrc` auto-loads `tools/secrets/.envrc.vault` when you `direnv allow .`.
 
 ### 4) SSO + Redis + Vault K8s onboarding
 
@@ -90,7 +90,7 @@ just sso-bootstrap
 * Onboards Kubernetes auth in Vault + ESO `role` **only if `VAULT_TOKEN` is defined**.
 * Registers **Hydra OAuth clients** from `deploy/ory/clients.yaml` (idempotent PUT/POST).
 
-> If Vault onboarding is skipped (no token), set `VAULT_TOKEN` and **re‑run** `just sso-bootstrap`.
+> If Vault onboarding is skipped (no token), set `VAULT_TOKEN` (e.g., `source tools/secrets/.envrc.vault`) and **re‑run** `just sso-bootstrap`.
 
 ### 5) Core services & Observability & UX
 
@@ -101,6 +101,31 @@ just deploy-ux       # Homepage, Guacamole, Vaultwarden, MCP Context Forge
 ```
 
 * All `helm upgrade --install` or `kubectl apply` and safe to re‑run.
+
+### 6b) Seed app secrets in Vault (quickstart)
+
+```bash
+# Requires a valid VAULT_TOKEN (see step 3)
+
+# Built-ins (n8n, rabbitmq, flagsmith)
+just vault-seed-kv                 # guided prompts for all
+just vault-seed-kv --only n8n      # only n8n
+just vault-seed-kv --only rabbitmq # only rabbitmq
+just vault-seed-kv --random        # autogenerate strong values
+
+# New Nx-generated service (APP_SECRET at kv/apps/<name>/APP_SECRET)
+just vault-seed my-api             # prompt or autogenerate
+just vault-seed my-api --random    # autogenerate strong secret
+```
+
+Seeds:
+- kv/apps/n8n/app: N8N_BASIC_AUTH_PASSWORD
+- kv/apps/rabbitmq/app: password, erlangCookie
+- kv/apps/flagsmith/app: secret-key
+- kv/apps/flagsmith/database: url (optional)
+- kv/apps/<service>/APP_SECRET: APP_SECRET (for Nx-generated services)
+
+External Secrets Operator syncs these KV entries to K8s Secrets; manifests/values are already wired.
 
 ### 6) Generate and run a sample app (Nx)
 
@@ -145,8 +170,10 @@ just doctor
     ├── ory/{kratos-values.yaml,hydra-values.yaml,clients.yaml}
     ├── oauth2-proxy/values.yaml
     ├── redis/values.yaml
-    ├── rabbitmq/values.yaml
+    ├── rabbitmq/values.yaml               # Uses existingSecret via ESO (rabbitmq-auth)
+    ├── rabbitmq/externalsecret.yaml       # ESO: produces rabbitmq-auth with password and erlangCookie
     ├── n8n/values.yaml
+    ├── n8n/externalsecret.yaml            # ESO: produces n8n-env secret with env vars from Vault
     ├── flagsmith/deploy.yaml
     ├── observability/{otel-values.yaml,loki-values.yaml,tempo-values.yaml,mimir-values.yaml,grafana-values.yaml}
     └── {guacamole, vaultwarden, mcp}/…    # UX apps
@@ -158,6 +185,25 @@ just doctor
   `deploy/ory/clients.yaml` redirect URIs are **auto‑rewritten** to the `DOMAIN` at registration time.
 * **MetalLB pool** is **auto‑patched**. **Do not hardcode** IPs in services—use Ingress for most apps.
 * **Vault/ESO binding**: ESO uses `ClusterSecretStore` named `vault-kv` and Vault role **`eso`** (created by `vault_k8s_onboard.sh`). If you add namespaces or service accounts, update that script and the CR accordingly.
+* **n8n password via ESO**: `deploy/n8n/externalsecret.yaml` creates a Secret `n8n-env` (from Vault path `kv/data/apps/n8n/app`, property `N8N_BASIC_AUTH_PASSWORD`). For Bitnami chart installs, `deploy/n8n/values.yaml` sets `extraEnvVarsSecret: n8n-env`. If using the community chart, `deploy/n8n/community-values.yaml` sets `envFrom: secretRef: n8n-env`.
+* **RabbitMQ creds via ESO**: `deploy/rabbitmq/externalsecret.yaml` creates `rabbitmq-auth` with keys `rabbitmq-password` and `rabbitmq-erlang-cookie` from Vault path `kv/data/apps/rabbitmq/app`. `deploy/rabbitmq/values.yaml` references `existingPasswordSecret` and `existingErlangSecret` so the chart consumes those values.
+
+---
+
+## Environment and secrets management (direnv + Vault)
+
+* `.envrc` loads in this order:
+  1) `tools/secrets/.env.vault` (legacy, if present)
+  2) `tools/secrets/.envrc.vault` – preferred; exports `VAULT_ADDR` and `VAULT_TOKEN` written by `just vault-init` and overrides legacy values.
+  3) `.env` (committed) – non-secret defaults.
+  4) `.env.local` (gitignored) – per-developer overrides, wins over `.env`.
+  5) `tools/secrets/.envrc.cloudflare` (gitignored) – optional `CF_API_TOKEN` for `just cf-dns-secret`.
+
+Guidelines for agents:
+* Do not commit secrets. Put app/runtime secrets in Vault under `kv/apps/<service>/...` and reference via `ExternalSecret`.
+* For sensitive env vars, prefer a single Secret populated by ESO and wire it via Helm values (e.g., `extraEnvVarsSecret`).
+* For non-secrets (domains, toggles), prefer `.env` defaults with `.env.local` overrides.
+* If you need Cloudflare DNS-01 automation, place `export CF_API_TOKEN=...` in `tools/secrets/.envrc.cloudflare`.
 * **CNI**: `install-foundation` installs Cilium unless `SKIP_CILIUM=true`. Leave this flag on if cluster currently uses flannel and you’re avoiding a CNI cutover.
 
 ---
@@ -185,7 +231,7 @@ just doctor
 ## Known pitfalls & workarounds (read before running)
 
 * **WSL2** without **systemd** can cause Helm hooks and services to misbehave. Enable systemd and restart WSL.
-* If `just sso-bootstrap` prints `VAULT_TOKEN not set; skipping Vault onboarding`, **export** `VAULT_TOKEN` (or `source tools/secrets/.env.vault`) and **re‑run** `just sso-bootstrap`.
+* If `just sso-bootstrap` prints `VAULT_TOKEN not set; skipping Vault onboarding`, **export** `VAULT_TOKEN` (or `source tools/secrets/.envrc.vault`, legacy: `tools/secrets/.env.vault`) and **re‑run** `just sso-bootstrap`.
 * If Hydra client registration fails with YAML import error, run:
 
   ```bash

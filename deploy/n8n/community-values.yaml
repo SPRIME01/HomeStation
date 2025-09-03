@@ -1,29 +1,15 @@
-image:
-  repository: n8nio/n8n
-  pullPolicy: IfNotPresent
-  tag: ""
+# Values for the community-charts/n8n chart to load sensitive envs from a Secret
+# produced by External Secrets (deploy/n8n/externalsecret.yaml).
 
-# Do not enable chart Ingress; we manage Ingress via deploy/n8n/ingress*.yaml
-ingress:
-  enabled: false
+env:
+  - name: N8N_BASIC_AUTH_ACTIVE
+    value: "true"
+  - name: N8N_BASIC_AUTH_USER
+    value: "admin"
 
-# Main pod configuration (per chart schema)
-main:
-  # Persistent data under /home/node/.n8n
-  persistence:
-    enabled: true
-    size: 2Gi
-    mountPath: "/home/node/.n8n"
-    accessMode: ReadWriteOnce
-    storageClass: ""
+# Mount all keys from Secret `n8n-env` as environment variables.
+# (Most community charts support envFrom; unknown keys are ignored harmlessly.)
+envFrom:
+  - secretRef:
+      name: n8n-env
 
-  # Environment variables for canonical URL and metrics
-  extraEnvVars:
-    N8N_HOST: n8n.primefam.cloud
-    N8N_PROTOCOL: https
-    N8N_METRICS: "true"
-
-service:
-  enabled: true
-  type: ClusterIP
-  port: 5678

@@ -1,0 +1,10 @@
+hydra:
+  config:
+    urls:
+      self:
+        issuer: https://auth.homelab.lan
+  service:
+    public:
+      type: ClusterIP
+    admin:
+      type: ClusterIP

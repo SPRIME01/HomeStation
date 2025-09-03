@@ -18,6 +18,14 @@ just deploy-ux
 # Then add to OS/browser trust store.
 
 
+## Next
+Link docs index from README: add a “Docs” section pointing to docs/diataxis/index.md.
+Validate endpoints: list current Ingress hosts and namespaces for a quick sanity check.
+Enable Promtail: PROMTAIL_ENABLED=1 just deploy-obs (if ulimit is ≥ 1048576).
+Add CI-friendly docs step: script/just recipe to lint/validate docs links.
+Generate a one-pager: update docs/technical-documentation.md to summarize the new docs and key commands.
+Publish docs guidance: add quick instructions for GitHub Pages or mkdocs if you want a website.
+
 
 
 
@@ -69,3 +77,73 @@ Add TLS via Traefik with your domain (let’s encrypt or local CA)?
 Add a Community n8n values file to enable basic auth/persistence?
 Add RabbitMQ Ingress annotations (auth, middlewares) or Kong exposure later?
 If anything 404s after DNS is set, share kubectl -n core get ingress,svc,pods and kubectl -n kube-system get svc traefik -o yaml and I’ll drill in.
+
+---
+
+Great — Vault is reachable and healthy; Kubernetes auth just isn’t enabled yet.
+
+Run these locally (with your existing port-forward on 127.0.0.1
+):
+
+Export token
+source tools/secrets/.envrc.vault
+Onboard Vault Kubernetes auth
+VAULT_ADDR=http://127.0.0.1:8200 bash tools/scripts/vault_k8s_onboard.sh
+The script:
+Enables auth/kubernetes
+Configures reviewer JWT, host, CA, issuer
+Creates policy eso-reader for kv v2 reads under kv/apps/*
+Creates role eso bound to SA infra/external-secrets with audiences=api (auto-fallback to bound_audiences for older plugins)
+Ensures kv/ mount is v2
+Verify immediately:
+
+vault auth list
+Expect to see kubernetes/ alongside token/
+vault read auth/kubernetes/role/eso
+Expect bound_service_account_names=external-secrets, bound_service_account_namespaces=infra, audiences (or bound_audiences)=api
+vault secrets list | awk '{print $1}' | grep '^kv/'
+Expect kv/
+Seed RabbitMQ and deploy:
+
+just vault-seed-kv --only rabbitmq --random
+just deploy-core
+Readiness checks:
+
+kubectl get clustersecretstore vault-kv -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+Expect True
+kubectl -n core get secret rabbitmq-auth -o jsonpath='{.data.rabbitmq-password}{" "}{.data.rabbitmq-erlang-cookie}' | awk '{print (length($1)>0 && length($2)>0)? "OK":"MISSING"}'
+Expect OK
+If anything fails, paste the outputs for:
+
+vault auth list
+vault read auth/kubernetes/config
+vault read auth/kubernetes/role/eso
+kubectl -n infra logs deploy/external-secrets (last 50 lines)
+kubectl get clustersecretstore vault-kv -o yaml (conditions)
+---
+The ClusterSecretStore can’t connect because Vault’s Kubernetes auth isn’t enabled yet. You already have the port-forward up, so let’s onboard Vault and retry.
+
+Do this now
+
+Load token: source tools/secrets/.envrc.vault
+Onboard Vault k8s auth:
+VAULT_ADDR=http://127.0.0.1:8200 bash tools/scripts/vault_k8s_onboard.sh
+Script enables auth/kubernetes, configures reviewer JWT/host/CA/issuer, ensures kv/ v2, and creates role eso bound to infra/external-secrets with audiences api,https://kubernetes.default.svc.cluster.local (handles both token audiences).
+Seed RabbitMQ:
+just vault-seed-kv --only rabbitmq --random
+Re-run deploy:
+just deploy-core
+Quick checks
+
+vault auth list → shows kubernetes/
+vault read auth/kubernetes/role/eso → confirms SA/namespace and audiences
+kubectl get clustersecretstore vault-kv -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' → True
+kubectl -n core get secret rabbitmq-auth -o jsonpath='{.data.rabbitmq-password} {" "}{.data.rabbitmq-erlang-cookie}' | awk '{print (length($1)&&length($2))?\"OK\":\"MISSING\"}' → OK
+If still not ready
+
+Logs: kubectl -n infra logs deploy/external-secrets | tail -n 100
+Verify ESO SA: kubectl -n infra get sa external-secrets -o yaml
+Verify Vault config:
+vault read auth/kubernetes/config
+vault read auth/kubernetes/role/eso
+Paste any failing outputs and I’ll pinpoint the next tweak.
