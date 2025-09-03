@@ -147,3 +147,207 @@ Verify Vault config:
 vault read auth/kubernetes/config
 vault read auth/kubernetes/role/eso
 Paste any failing outputs and I’ll pinpoint the next tweak.
+
+---
+
+### just deploy core
+
+just deploy-obs
+# Support INSTALL_DRY_RUN=1 to print actions instead of performing changes.
+DRY=0; for a in *; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; just --set INSTALL_DRY_RUN "$DRY" helm-repos; if [ "$DRY" = "1" ]; then echo "[dry-run] helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n \"$NAMESPACE_OBS\" -f deploy/observability/otel-values.yaml"; echo "[dry-run] helm upgrade --install loki grafana/loki -n \"$NAMESPACE_OBS\" -f deploy/observability/loki-values.yaml"; echo "[dry-run] helm upgrade --install tempo grafana/tempo -n \"$NAMESPACE_OBS\" -f deploy/observability/tempo-values.yaml"; echo "[dry-run] helm upgrade --install mimir grafana/mimir-distributed -n \"$NAMESPACE_OBS\" -f deploy/observability/mimir-values.yaml"; echo "[dry-run] helm upgrade --install grafana grafana/grafana -n \"$NAMESPACE_OBS\" -f deploy/observability/grafana-values.yaml"; if [ "${PROMTAIL_ENABLED}" = "1" ]; then echo "[dry-run] helm upgrade --install promtail grafana/promtail -n \"$NAMESPACE_OBS\" -f deploy/observability/promtail-values.yaml"; else echo "[dry-run] [skipped] promtail disabled (set PROMTAIL_ENABLED=1 to enable)"; fi; else helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n "$NAMESPACE_OBS" -f deploy/observability/otel-values.yaml; helm upgrade --install loki grafana/loki -n "$NAMESPACE_OBS" -f deploy/observability/loki-values.yaml; helm upgrade --install tempo grafana/tempo -n "$NAMESPACE_OBS" -f deploy/observability/tempo-values.yaml; helm upgrade --install mimir grafana/mimir-distributed -n "$NAMESPACE_OBS" -f deploy/observability/mimir-values.yaml || true; helm upgrade --install grafana grafana/grafana -n "$NAMESPACE_OBS" -f deploy/observability/grafana-values.yaml; if [ "${PROMTAIL_ENABLED}" = "1" ]; then helm upgrade --install promtail grafana/promtail -n "$NAMESPACE_OBS" -f deploy/observability/promtail-values.yaml; else echo "[skip] promtail disabled (set PROMTAIL_ENABLED=1 to enable)"; fi; fi
+# Ensure minimal custom Helm registry config (avoids using user keyring when empty/anon pulls)
+# Support --dry-run/-n as a convenience flag
+DRY=${INSTALL_DRY_RUN:-0}; for a in *; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; if [ "$DRY" = "1" ]; then if [ ! -f "${HELM_REGISTRY_CONFIG}" ]; then echo "[dry-run] mkdir -p \"$(dirname ${HELM_REGISTRY_CONFIG})\" && echo '{}' > \"${HELM_REGISTRY_CONFIG}\""; else echo "[dry-run] (exists) ${HELM_REGISTRY_CONFIG}"; fi; echo "[dry-run] helm repo add cilium https://helm.cilium.io || true"; echo "[dry-run] helm repo add metallb https://metallb.github.io/metallb || true"; echo "[dry-run] helm repo add hashicorp https://helm.releases.hashicorp.com || true"; echo "[dry-run] helm repo add argo https://argoproj.github.io/argo-helm || true"; echo "[dry-run] helm repo add grafana https://grafana.github.io/helm-charts || true"; echo "[dry-run] helm repo add bitnami https://charts.bitnami.com/bitnami || true"; echo "[dry-run] helm repo add external-secrets https://charts.external-secrets.io || true"; echo "[dry-run] helm repo add ory https://k8s.ory.sh/helm/charts || true"; echo "[dry-run] helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests || true"; echo "[dry-run] helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true"; echo "[dry-run] helm repo update"; else if [ ! -f "${HELM_REGISTRY_CONFIG}" ]; then mkdir -p "$(dirname ${HELM_REGISTRY_CONFIG})"; echo '{}' > "${HELM_REGISTRY_CONFIG}"; printf '[helm] Created minimal registry config at %s\n' "${HELM_REGISTRY_CONFIG}"; fi; echo "[helm] Using HELM_REGISTRY_CONFIG=${HELM_REGISTRY_CONFIG}"; if grep -q '"credsStore"' "${HELM_REGISTRY_CONFIG}" 2>/dev/null || grep -q '"credHelpers"' "${HELM_REGISTRY_CONFIG}" 2>/dev/null; then echo "[error] ${HELM_REGISTRY_CONFIG} contains credsStore/credHelpers. Remove them or set HELM_NO_CREDS=1."; exit 1; else echo "[helm] Registry config OK (no credential helpers)"; fi; helm repo add cilium https://helm.cilium.io || true; helm repo add metallb https://metallb.github.io/metallb || true; helm repo add hashicorp https://helm.releases.hashicorp.com || true; helm repo add argo https://argoproj.github.io/argo-helm || true; helm repo add grafana https://grafana.github.io/helm-charts || true; helm repo add bitnami https://charts.bitnami.com/bitnami || true; helm repo add jetstack https://charts.jetstack.io || true; helm repo add community-charts https://community-charts.github.io/helm-charts || true; helm repo add external-secrets https://charts.external-secrets.io || true; helm repo add ory https://k8s.ory.sh/helm/charts || true; helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests || true; helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true; helm repo update; fi
+[helm] Using HELM_REGISTRY_CONFIG=.helm-registry/config.json
+[helm] Registry config OK (no credential helpers)
+"cilium" already exists with the same configuration, skipping
+"metallb" already exists with the same configuration, skipping
+"hashicorp" already exists with the same configuration, skipping
+"argo" already exists with the same configuration, skipping
+"grafana" already exists with the same configuration, skipping
+"bitnami" already exists with the same configuration, skipping
+"jetstack" already exists with the same configuration, skipping
+"community-charts" already exists with the same configuration, skipping
+"external-secrets" already exists with the same configuration, skipping
+"ory" already exists with the same configuration, skipping
+"oauth2-proxy" already exists with the same configuration, skipping
+"open-telemetry" already exists with the same configuration, skipping
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "metallb" chart repository
+...Successfully got an update from the "oauth2-proxy" chart repository
+...Successfully got an update from the "hashicorp" chart repository
+...Successfully got an update from the "cilium" chart repository
+...Successfully got an update from the "open-telemetry" chart repository
+...Successfully got an update from the "community-charts" chart repository
+...Successfully got an update from the "ory" chart repository
+...Successfully got an update from the "argo" chart repository
+...Successfully got an update from the "external-secrets" chart repository
+...Successfully got an update from the "jetstack" chart repository
+...Successfully got an update from the "grafana" chart repository
+...Successfully got an update from the "bitnami" chart repository
+Update Complete. ⎈Happy Helming!⎈
+Release "otel-collector" has been upgraded. Happy Helming!
+NAME: otel-collector
+LAST DEPLOYED: Tue Sep  2 22:18:22 2025
+NAMESPACE: observability
+STATUS: deployed
+REVISION: 8
+TEST SUITE: None
+NOTES:
+[WARNING] No resource limits or requests were set. Consider setting resource requests and limits for your collector(s) via the `resources` field.
+
+[WARNING] "useGOMEMLIMIT" is enabled but memory limits have not been supplied so the GOMEMLIMIT env var could not be added. Solve this problem by setting resources.limits.memory or disabling useGOMEMLIMIT
+Release "loki" has been upgraded. Happy Helming!
+NAME: loki
+LAST DEPLOYED: Tue Sep  2 22:18:24 2025
+NAMESPACE: observability
+STATUS: deployed
+REVISION: 5
+NOTES:
+***********************************************************************
+ Welcome to Grafana Loki
+ Chart version: 6.38.0
+ Chart Name: loki
+ Loki version: 3.5.3
+***********************************************************************
+
+** Please be patient while the chart is being deployed **
+
+Tip:
+
+  Watch the deployment status using the command: kubectl get pods -w --namespace observability
+
+If pods are taking too long to schedule make sure pod affinity can be fulfilled in the current cluster.
+
+***********************************************************************
+Installed components:
+***********************************************************************
+* loki
+
+Loki has been deployed as a single binary.
+This means a single pod is handling reads and writes. You can scale that pod vertically by adding more CPU and memory resources.
+
+
+***********************************************************************
+Sending logs to Loki
+***********************************************************************
+
+Loki has been configured with a gateway (nginx) to support reads and writes from a single component.
+
+You can send logs from inside the cluster using the cluster DNS:
+
+http://loki-gateway.observability.svc.cluster.local/loki/api/v1/push
+
+You can test to send data from outside the cluster by port-forwarding the gateway to your local machine:
+
+  kubectl port-forward --namespace observability svc/loki-gateway 3100:80 &
+
+And then using http://127.0.0.1:3100/loki/api/v1/push URL as shown below:
+
+```
+curl -H "Content-Type: application/json" -XPOST -s "http://127.0.0.1:3100/loki/api/v1/push"  \
+--data-raw "{\"streams\": [{\"stream\": {\"job\": \"test\"}, \"values\": [[\"$(date +%s)000000000\", \"fizzbuzz\"]]}]}" \
+-H X-Scope-OrgId:foo
+```
+
+Then verify that Loki did receive the data using the following command:
+
+```
+curl "http://127.0.0.1:3100/loki/api/v1/query_range" --data-urlencode 'query={job="test"}' -H X-Scope-OrgId:foo | jq .data.result
+```
+
+***********************************************************************
+Connecting Grafana to Loki
+***********************************************************************
+
+If Grafana operates within the cluster, you'll set up a new Loki datasource by utilizing the following URL:
+
+http://loki-gateway.observability.svc.cluster.local/
+
+***********************************************************************
+Multi-tenancy
+***********************************************************************
+
+Loki is configured with auth enabled (multi-tenancy) and expects tenant headers (`X-Scope-OrgID`) to be set for all API calls.
+
+You must configure Grafana's Loki datasource using the `HTTP Headers` section with the `X-Scope-OrgID` to target a specific tenant.
+For each tenant, you can create a different datasource.
+
+The agent of your choice must also be configured to propagate this header.
+For example, when using Promtail you can use the `tenant` stage. https://grafana.com/docs/loki/latest/send-data/promtail/stages/tenant/
+
+When not provided with the `X-Scope-OrgID` while auth is enabled, Loki will reject reads and writes with a 404 status code `no org id`.
+
+You can also use a reverse proxy, to automatically add the `X-Scope-OrgID` header as suggested by https://grafana.com/docs/loki/latest/operations/authentication/
+
+For more information, read our documentation about multi-tenancy: https://grafana.com/docs/loki/latest/operations/multi-tenancy/
+
+> When using curl you can pass `X-Scope-OrgId` header using `-H X-Scope-OrgId:foo` option, where foo can be replaced with the tenant of your choice.
+Release "tempo" has been upgraded. Happy Helming!
+NAME: tempo
+LAST DEPLOYED: Tue Sep  2 22:18:27 2025
+NAMESPACE: observability
+STATUS: deployed
+REVISION: 4
+TEST SUITE: None
+Release "mimir" has been upgraded. Happy Helming!
+NAME: mimir
+LAST DEPLOYED: Tue Sep  2 22:18:30 2025
+NAMESPACE: observability
+STATUS: deployed
+REVISION: 4
+NOTES:
+Welcome to Grafana Mimir!
+Remote write endpoints for Prometheus or Grafana Agent:
+Ingress is not enabled, see the nginx.ingress values.
+From inside the cluster:
+  http://mimir-nginx.observability.svc:80/api/v1/push
+
+Read address, Grafana data source (Prometheus) URL:
+Ingress is not enabled, see the nginx.ingress values.
+From inside the cluster:
+  http://mimir-nginx.observability.svc:80/prometheus
+
+**IMPORTANT**: Always consult CHANGELOG.md file at https://github.com/grafana/mimir/blob/main/operations/helm/charts/mimir-distributed/CHANGELOG.md and the deprecation list there to learn about breaking changes that require action during upgrade.
+Release "grafana" has been upgraded. Happy Helming!
+NAME: grafana
+LAST DEPLOYED: Tue Sep  2 22:18:44 2025
+NAMESPACE: observability
+STATUS: deployed
+REVISION: 4
+NOTES:
+1. Get your 'admin' user password by running:
+
+   kubectl get secret --namespace observability grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+
+2. The Grafana server can be accessed via port 80 on the following DNS name from within your cluster:
+
+   grafana.observability.svc.cluster.local
+
+   If you bind grafana to 80, please update values in values.yaml and reinstall:
+   ```
+   securityContext:
+     runAsUser: 0
+     runAsGroup: 0
+     fsGroup: 0
+
+   command:
+   - "setcap"
+   - "'cap_net_bind_service=+ep'"
+   - "/usr/sbin/grafana-server &&"
+   - "sh"
+   - "/run.sh"
+   ```
+   Details refer to https://grafana.com/docs/installation/configuration/#http-port.
+   Or grafana would always crash.
+
+   From outside the cluster, the server URL(s) are:
+     http://grafana.homelab.lan
+
+3. Login with the password from step 1 and the username: admin
+#################################################################################
+######   WARNING: Persistence is disabled!!! You will lose your data when   #####
+######            the Grafana pod is terminated.                            #####
+#################################################################################
+[skip] promtail disabled (set PROMTAIL_ENABLED=1 to enable)
