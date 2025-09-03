@@ -13,11 +13,10 @@ export NAMESPACE_INFRA := env_var_or_default("NAMESPACE_INFRA", "infra")
 export HYDRA_ADMIN_URL := "http://hydra-admin." + NAMESPACE_SSO + ".svc.cluster.local:4445"
 export KRATOS_PUBLIC_URL := "http://kratos-public." + NAMESPACE_SSO + ".svc.cluster.local:4433"
 export OAUTH2_PROXY_REDIS_ENABLED := env_var_or_default("OAUTH2_PROXY_REDIS_ENABLED", "true")
-export HELM_NO_CREDS := env_var_or_default("HELM_NO_CREDS", "0") # If 1, use minimal DOCKER_CONFIG to avoid secretservice helper
+export HELM_NO_CREDS := env_var_or_default("HELM_NO_CREDS", "1") # If 1, use minimal DOCKER_CONFIG to avoid secretservice helper
 export HELM_REGISTRY_CONFIG := env_var_or_default("HELM_REGISTRY_CONFIG", ".helm-registry/config.json") # Override to custom registry config
 export RABBITMQ_CHART_VERSION := env_var_or_default("RABBITMQ_CHART_VERSION", "16.0.14")
-export N8N_CHART_VERSION := env_var_or_default("N8N_CHART_VERSION", "1.15.2")
-export N8N_USE_COMMUNITY_VALUES := env_var_or_default("N8N_USE_COMMUNITY_VALUES", "1")
+export N8N_CHART_VERSION := env_var_or_default("N8N_CHART_VERSION", "")
 export PROMTAIL_ENABLED := env_var_or_default("PROMTAIL_ENABLED", "0")
 
 # Safety switch: require explicit opt-in to WRITE MetalLB pool file.
@@ -47,11 +46,18 @@ helm-repos +args='*':
 		echo "[dry-run] helm repo add oauth2-proxy https://oauth2-proxy.github.io/manifests || true"; \
 		echo "[dry-run] helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts || true"; \
 			echo "[dry-run] helm repo update"; \
-		else \
-		if [ ! -f "${HELM_REGISTRY_CONFIG}" ]; then \
-			mkdir -p "$(dirname ${HELM_REGISTRY_CONFIG})"; echo '{}' > "${HELM_REGISTRY_CONFIG}"; \
-			printf '[helm] Created minimal registry config at %s\n' "${HELM_REGISTRY_CONFIG}"; \
-		fi; \
+			else \
+			if [ ! -f "${HELM_REGISTRY_CONFIG}" ]; then \
+				mkdir -p "$(dirname ${HELM_REGISTRY_CONFIG})"; echo '{}' > "${HELM_REGISTRY_CONFIG}"; \
+				printf '[helm] Created minimal registry config at %s\n' "${HELM_REGISTRY_CONFIG}"; \
+			fi; \
+			echo "[helm] Using HELM_REGISTRY_CONFIG=${HELM_REGISTRY_CONFIG}"; \
+			if grep -q '"credsStore"' "${HELM_REGISTRY_CONFIG}" 2>/dev/null || grep -q '"credHelpers"' "${HELM_REGISTRY_CONFIG}" 2>/dev/null; then \
+				echo "[error] ${HELM_REGISTRY_CONFIG} contains credsStore/credHelpers. Remove them or set HELM_NO_CREDS=1."; \
+				exit 1; \
+			else \
+				echo "[helm] Registry config OK (no credential helpers)"; \
+			fi; \
 		helm repo add cilium https://helm.cilium.io || true; \
 		helm repo add metallb https://metallb.github.io/metallb || true; \
 		helm repo add hashicorp https://helm.releases.hashicorp.com || true; \
@@ -245,6 +251,19 @@ doctor +args='*':
 	# Run audit and surface summary; supports --dry-run
 	DRY=0; for a in {{args}}; do [ "$a" = "--dry-run" ] || [ "$a" = "-n" ] && DRY=1; done; \
 	just --set INSTALL_DRY_RUN "$DRY" audit
+
+doctor-helm +args='*':
+	# Check Helm registry config hygiene and Traefik Middleware CRD presence
+	CFG="${HELM_REGISTRY_CONFIG}"; \
+	[ -f "$CFG" ] && echo "[helm] HELM_REGISTRY_CONFIG=$CFG" || echo "[helm] Missing HELM_REGISTRY_CONFIG at $CFG"; \
+	if [ -f "$CFG" ]; then \
+	  if grep -q '"credsStore"' "$CFG" 2>/dev/null || grep -q '"credHelpers"' "$CFG" 2>/dev/null; then \
+	    echo "[error] $CFG contains credsStore/credHelpers"; \
+	  else \
+	    echo "[ok] Registry config has no credential helpers"; \
+	  fi; \
+	fi; \
+	kubectl api-resources 2>/dev/null | grep -Eiq 'traefik.*Middleware' && echo "[ok] Traefik Middleware CRD present" || echo "[info] Traefik Middleware CRD not found"
 
 cloudflare-tunnel +args='*':
 	# Apply Cloudflare Tunnel (Named Tunnel) manifests; requires credentials secret

@@ -1,15 +1,8 @@
-# Values for the community-charts/n8n chart to load sensitive envs from a Secret
-# produced by External Secrets (deploy/n8n/externalsecret.yaml).
+# Minimal, schema-safe values for community-charts/n8n.
+# Customize by first inspecting chart defaults:
+#   helm show values community-charts/n8n > /tmp/n8n.values
+# and only adding keys supported by that chart version.
 
-env:
-  - name: N8N_BASIC_AUTH_ACTIVE
-    value: "true"
-  - name: N8N_BASIC_AUTH_USER
-    value: "admin"
-
-# Mount all keys from Secret `n8n-env` as environment variables.
-# (Most community charts support envFrom; unknown keys are ignored harmlessly.)
-envFrom:
-  - secretRef:
-      name: n8n-env
+service:
+  type: ClusterIP
 
